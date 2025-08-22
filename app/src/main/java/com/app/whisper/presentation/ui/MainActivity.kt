@@ -13,9 +13,12 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import com.app.whisper.presentation.permission.PermissionHandler
 import com.app.whisper.presentation.theme.WhisperAndroidTheme
+import com.app.whisper.presentation.ui.component.PermissionDialog
 import com.app.whisper.presentation.ui.screen.RecordingScreen
 import com.app.whisper.presentation.viewmodel.TranscriptionViewModel
 import dagger.hilt.android.AndroidEntryPoint
@@ -30,28 +33,54 @@ import dagger.hilt.android.AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
     private val transcriptionViewModel: TranscriptionViewModel by viewModels()
+    private lateinit var permissionHandler: PermissionHandler
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
+        // Initialize permission handler
+        permissionHandler = PermissionHandler(this)
+
         setContent {
             WhisperAndroidTheme {
                 val uiState by transcriptionViewModel.uiState.collectAsState()
+                val permissionState by permissionHandler.permissionState.collectAsState()
 
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     RecordingScreen(
                         uiState = uiState,
-                        onStartRecording = { transcriptionViewModel.startRecording() },
+                        onStartRecording = {
+                            if (permissionHandler.hasPermission()) {
+                                transcriptionViewModel.startRecording()
+                            } else {
+                                permissionHandler.requestMicrophonePermission()
+                            }
+                        },
                         onStopRecording = { transcriptionViewModel.stopRecording() },
                         onPauseRecording = { transcriptionViewModel.pauseRecording() },
                         onResumeRecording = { transcriptionViewModel.resumeRecording() },
                         onClearResult = { transcriptionViewModel.clearResult() },
+                        permissionState = permissionState,
+                        onRequestPermission = { permissionHandler.requestMicrophonePermission() },
                         modifier = Modifier.padding(innerPadding)
+                    )
+
+                    // Permission dialog
+                    PermissionDialog(
+                        permissionState = permissionState,
+                        onRequestPermission = { permissionHandler.requestMicrophonePermission() },
+                        onDismiss = { /* Handle dismiss if needed */ }
                     )
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Refresh permission state when returning from settings
+        permissionHandler.refreshPermissionState()
     }
 }
 

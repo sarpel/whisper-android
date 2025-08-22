@@ -27,10 +27,12 @@ import com.app.whisper.presentation.state.TranscriptionUiState
 import com.app.whisper.presentation.ui.component.WaveformVisualizer
 import com.app.whisper.presentation.ui.component.RecordingButton
 import com.app.whisper.presentation.ui.component.StatusCard
+import com.app.whisper.presentation.ui.component.PermissionRequestCard
+import com.app.whisper.presentation.permission.PermissionState
 
 /**
  * Main recording screen for audio capture and transcription.
- * 
+ *
  * This screen provides the primary interface for recording audio,
  * visualizing waveforms, and displaying transcription results.
  */
@@ -43,7 +45,9 @@ fun RecordingScreen(
     onPauseRecording: () -> Unit,
     onResumeRecording: () -> Unit,
     onClearResult: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    permissionState: PermissionState? = null,
+    onRequestPermission: (() -> Unit)? = null
 ) {
     Column(
         modifier = modifier
@@ -64,17 +68,28 @@ fun RecordingScreen(
                 containerColor = MaterialTheme.colorScheme.surface
             )
         )
-        
+
         Spacer(modifier = Modifier.height(24.dp))
-        
+
+        // Permission Request Card (if needed)
+        if (permissionState != null && onRequestPermission != null && !permissionState.isGranted()) {
+            PermissionRequestCard(
+                permissionState = permissionState,
+                onRequestPermission = onRequestPermission,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+        }
+
         // Status Card
         StatusCard(
             uiState = uiState,
             modifier = Modifier.fillMaxWidth()
         )
-        
+
         Spacer(modifier = Modifier.height(32.dp))
-        
+
         // Waveform Visualizer
         WaveformSection(
             uiState = uiState,
@@ -82,9 +97,9 @@ fun RecordingScreen(
                 .fillMaxWidth()
                 .height(120.dp)
         )
-        
+
         Spacer(modifier = Modifier.height(32.dp))
-        
+
         // Recording Controls
         RecordingControls(
             uiState = uiState,
@@ -94,9 +109,9 @@ fun RecordingScreen(
             onResumeRecording = onResumeRecording,
             modifier = Modifier.fillMaxWidth()
         )
-        
+
         Spacer(modifier = Modifier.height(24.dp))
-        
+
         // Transcription Result
         TranscriptionResultSection(
             uiState = uiState,
@@ -139,8 +154,8 @@ private fun WaveformSection(
                 }
                 is TranscriptionUiState.Processing -> {
                     WaveformVisualizer(
-                        waveformData = uiState.audioData?.let { 
-                            WaveformData.fromAudioData(it) 
+                        waveformData = uiState.audioData?.let {
+                            WaveformData.fromAudioData(it)
                         },
                         isActive = false,
                         modifier = Modifier.fillMaxSize()
@@ -186,7 +201,7 @@ private fun RecordingControls(
                     color = MaterialTheme.colorScheme.primary
                 )
             }
-            
+
             is TranscriptionUiState.Recording -> {
                 // Pause button
                 RecordingButton(
@@ -197,7 +212,7 @@ private fun RecordingControls(
                     color = MaterialTheme.colorScheme.secondary,
                     modifier = Modifier.padding(end = 16.dp)
                 )
-                
+
                 // Stop button
                 RecordingButton(
                     onClick = onStopRecording,
@@ -207,14 +222,14 @@ private fun RecordingControls(
                     color = MaterialTheme.colorScheme.error
                 )
             }
-            
+
             is TranscriptionUiState.Processing -> {
                 CircularProgressIndicator(
                     modifier = Modifier.size(56.dp),
                     color = MaterialTheme.colorScheme.primary
                 )
             }
-            
+
             else -> {
                 // Show disabled record button
                 RecordingButton(
@@ -263,14 +278,14 @@ private fun TranscriptionResultSection(
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onPrimaryContainer
                         )
-                        
+
                         TextButton(onClick = onClearResult) {
                             Text("Clear")
                         }
                     }
-                    
+
                     Spacer(modifier = Modifier.height(8.dp))
-                    
+
                     // Result text
                     Text(
                         text = uiState.result.text,
@@ -278,9 +293,9 @@ private fun TranscriptionResultSection(
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                         modifier = Modifier.weight(1f)
                     )
-                    
+
                     Spacer(modifier = Modifier.height(8.dp))
-                    
+
                     // Metadata
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -291,7 +306,7 @@ private fun TranscriptionResultSection(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
                         )
-                        
+
                         Text(
                             text = "Confidence: ${String.format("%.1f%%", uiState.result.confidence * 100)}",
                             style = MaterialTheme.typography.bodySmall,
@@ -301,7 +316,7 @@ private fun TranscriptionResultSection(
                 }
             }
         }
-        
+
         is TranscriptionUiState.Error -> {
             Card(
                 modifier = modifier,
@@ -323,9 +338,9 @@ private fun TranscriptionResultSection(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onErrorContainer
                     )
-                    
+
                     Spacer(modifier = Modifier.height(8.dp))
-                    
+
                     Text(
                         text = uiState.error.message ?: "Unknown error occurred",
                         style = MaterialTheme.typography.bodyMedium,
@@ -335,7 +350,7 @@ private fun TranscriptionResultSection(
                 }
             }
         }
-        
+
         else -> {
             // Empty state
             Box(
