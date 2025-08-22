@@ -406,7 +406,7 @@ class TranscriptionViewModel @Inject constructor(
      *
      * @return Current model or null
      */
-    private fun getCurrentModel() = _uiState.value.getCurrentModel()
+    private fun getCurrentModel() = _uiState.value.getActiveModel()
 
     override fun onCleared() {
         super.onCleared()

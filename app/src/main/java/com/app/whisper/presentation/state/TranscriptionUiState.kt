@@ -11,25 +11,25 @@ import com.app.whisper.domain.usecase.TranscriptionProgress
 
 /**
  * UI state for the transcription screen.
- * 
+ *
  * This sealed class represents all possible states of the transcription UI,
  * providing type-safe state management for the presentation layer.
  */
 sealed class TranscriptionUiState {
-    
+
     /**
      * Initial state when the screen is first loaded.
      */
     object Initial : TranscriptionUiState()
-    
+
     /**
      * Loading state while initializing the transcription system.
      */
     object Loading : TranscriptionUiState()
-    
+
     /**
      * Ready state when the system is prepared for transcription.
-     * 
+     *
      * @param currentModel Currently selected model
      * @param recordingState Current recording state
      * @param recentResults Recent transcription results
@@ -42,10 +42,10 @@ sealed class TranscriptionUiState {
         val canRecord: Boolean = true,
         val processingParameters: ProcessingParameters = ProcessingParameters()
     ) : TranscriptionUiState()
-    
+
     /**
      * Recording state when audio is being captured.
-     * 
+     *
      * @param recordingState Current recording state
      * @param waveformData Real-time waveform data
      * @param duration Recording duration in milliseconds
@@ -59,10 +59,10 @@ sealed class TranscriptionUiState {
         val canStop: Boolean = true,
         val canPause: Boolean = true
     ) : TranscriptionUiState()
-    
+
     /**
      * Processing state when transcription is in progress.
-     * 
+     *
      * @param progress Current transcription progress
      * @param audioData Audio data being processed
      * @param sessionId Associated session ID (if any)
@@ -74,10 +74,10 @@ sealed class TranscriptionUiState {
         val sessionId: String? = null,
         val canCancel: Boolean = true
     ) : TranscriptionUiState()
-    
+
     /**
      * Success state when transcription is completed.
-     * 
+     *
      * @param result Transcription result
      * @param session Associated session (if any)
      * @param audioData Original audio data
@@ -95,10 +95,10 @@ sealed class TranscriptionUiState {
         val canSave: Boolean = true,
         val canShare: Boolean = true
     ) : TranscriptionUiState()
-    
+
     /**
      * Error state when an error occurs.
-     * 
+     *
      * @param error The error that occurred
      * @param canRetry Whether the operation can be retried
      * @param canRecover Whether recovery is possible
@@ -110,10 +110,10 @@ sealed class TranscriptionUiState {
         val canRecover: Boolean = false,
         val previousState: TranscriptionUiState? = null
     ) : TranscriptionUiState()
-    
+
     /**
      * Check if the current state allows starting a new recording.
-     * 
+     *
      * @return true if recording can be started
      */
     fun canStartRecording(): Boolean = when (this) {
@@ -122,99 +122,99 @@ sealed class TranscriptionUiState {
         is Error -> canRecover
         else -> false
     }
-    
+
     /**
      * Check if the current state allows stopping recording.
-     * 
+     *
      * @return true if recording can be stopped
      */
     fun canStopRecording(): Boolean = when (this) {
         is Recording -> canStop
         else -> false
     }
-    
+
     /**
      * Check if the current state allows pausing recording.
-     * 
+     *
      * @return true if recording can be paused
      */
     fun canPauseRecording(): Boolean = when (this) {
         is Recording -> canPause
         else -> false
     }
-    
+
     /**
      * Check if transcription is currently in progress.
-     * 
+     *
      * @return true if transcription is active
      */
     fun isTranscribing(): Boolean = this is Processing
-    
+
     /**
      * Check if recording is currently active.
-     * 
+     *
      * @return true if recording is active
      */
     fun isRecording(): Boolean = this is Recording
-    
+
     /**
      * Check if the state represents a successful transcription.
-     * 
+     *
      * @return true if transcription was successful
      */
     fun isSuccess(): Boolean = this is Success
-    
+
     /**
      * Check if the state represents an error.
-     * 
+     *
      * @return true if there's an error
      */
     fun isError(): Boolean = this is Error
-    
+
     /**
      * Get the current model if available.
-     * 
+     *
      * @return Current model or null
      */
-    fun getCurrentModel(): WhisperModel? = when (this) {
+    fun getActiveModel(): WhisperModel? = when (this) {
         is Ready -> currentModel
         else -> null
     }
-    
+
     /**
      * Get the current recording state if available.
-     * 
+     *
      * @return Recording state or null
      */
-    fun getRecordingState(): RecordingState? = when (this) {
+    fun getActiveRecordingState(): RecordingState? = when (this) {
         is Ready -> recordingState
         is Recording -> recordingState
         else -> null
     }
-    
+
     /**
      * Get the transcription result if available.
-     * 
+     *
      * @return Transcription result or null
      */
     fun getTranscriptionResult(): TranscriptionResult? = when (this) {
         is Success -> result
         else -> null
     }
-    
+
     /**
      * Get the current error if any.
-     * 
+     *
      * @return Error or null
      */
-    fun getError(): Throwable? = when (this) {
+    fun getCurrentError(): Throwable? = when (this) {
         is Error -> error
         else -> null
     }
-    
+
     /**
      * Get a human-readable description of the current state.
-     * 
+     *
      * @return State description
      */
     fun getDescription(): String = when (this) {
@@ -226,20 +226,20 @@ sealed class TranscriptionUiState {
         is Success -> "Transcription completed"
         is Error -> "Error: ${error.message}"
     }
-    
+
     /**
      * Check if the UI should show a loading indicator.
-     * 
+     *
      * @return true if loading should be shown
      */
     fun isLoading(): Boolean = when (this) {
         is Loading, is Processing -> true
         else -> false
     }
-    
+
     /**
      * Check if the UI should be interactive.
-     * 
+     *
      * @return true if user interaction is allowed
      */
     fun isInteractive(): Boolean = when (this) {
@@ -248,11 +248,11 @@ sealed class TranscriptionUiState {
         is Error -> canRetry || canRecover
         else -> false
     }
-    
+
     companion object {
         /**
          * Create an initial ready state.
-         * 
+         *
          * @param model Current model
          * @return Ready state
          */
@@ -261,10 +261,10 @@ sealed class TranscriptionUiState {
             recordingState = RecordingState.Idle,
             canRecord = model?.isAvailable() == true
         )
-        
+
         /**
          * Create an error state from an exception.
-         * 
+         *
          * @param error The error that occurred
          * @param previousState Previous state for recovery
          * @return Error state

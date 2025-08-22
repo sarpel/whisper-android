@@ -13,7 +13,7 @@ import javax.inject.Singleton
 
 /**
  * Use case for downloading Whisper models.
- * 
+ *
  * This use case orchestrates the model download process, including validation,
  * progress tracking, and post-download verification. It encapsulates the business
  * logic for model management operations.
@@ -22,10 +22,10 @@ import javax.inject.Singleton
 class DownloadModelUseCase @Inject constructor(
     private val modelRepository: ModelRepository
 ) {
-    
+
     /**
      * Download a Whisper model.
-     * 
+     *
      * @param modelId Model ID to download
      * @return Flow of download progress
      */
@@ -37,11 +37,11 @@ class DownloadModelUseCase @Inject constructor(
                 if (model == null) {
                     throw IllegalArgumentException("Model not found: $modelId")
                 }
-                
+
                 if (model.isAvailable()) {
                     throw IllegalStateException("Model is already downloaded: $modelId")
                 }
-                
+
                 // Check storage space
                 val storageInfo = modelRepository.getStorageInfo()
                 if (storageInfo.availableSpaceBytes < model.fileSizeBytes * 1.2) { // 20% buffer
@@ -92,10 +92,10 @@ class DownloadModelUseCase @Inject constructor(
                 }
             }
     }
-    
+
     /**
      * Cancel an ongoing model download.
-     * 
+     *
      * @param modelId Model ID to cancel download for
      * @return Result indicating success or failure
      */
@@ -111,10 +111,10 @@ class DownloadModelUseCase @Inject constructor(
             Result.failure(e)
         }
     }
-    
+
     /**
      * Get recommended model for the current device.
-     * 
+     *
      * @param preferSpeed Whether to prioritize speed over quality
      * @return Recommended model
      */
@@ -126,10 +126,10 @@ class DownloadModelUseCase @Inject constructor(
             Result.failure(e)
         }
     }
-    
+
     /**
      * Check if a model can be downloaded on the current device.
-     * 
+     *
      * @param modelId Model ID to check
      * @return Result containing compatibility information
      */
@@ -137,10 +137,10 @@ class DownloadModelUseCase @Inject constructor(
         return try {
             val model = modelRepository.getModel(modelId)
                 ?: return Result.failure(IllegalArgumentException("Model not found: $modelId"))
-            
+
             val storageInfo = modelRepository.getStorageInfo()
             val availableMemoryMB = Runtime.getRuntime().maxMemory() / (1024 * 1024)
-            
+
             val compatibility = DownloadCompatibility(
                 canDownload = true,
                 hasEnoughStorage = storageInfo.availableSpaceBytes >= model.fileSizeBytes * 1.2,
@@ -158,19 +158,19 @@ class DownloadModelUseCase @Inject constructor(
                     }
                 }
             )
-            
+
             Result.success(compatibility.copy(
                 canDownload = compatibility.hasEnoughStorage && compatibility.hasEnoughMemory
             ))
-            
+
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
-    
+
     /**
      * Get all available models with download status.
-     * 
+     *
      * @return List of models with their current status
      */
     suspend fun getAvailableModels(): Result<List<WhisperModel>> {
@@ -181,10 +181,10 @@ class DownloadModelUseCase @Inject constructor(
             Result.failure(e)
         }
     }
-    
+
     /**
      * Delete a downloaded model.
-     * 
+     *
      * @param modelId Model ID to delete
      * @param deleteFiles Whether to delete associated files
      * @return Result indicating success or failure
@@ -196,16 +196,16 @@ class DownloadModelUseCase @Inject constructor(
             if (currentModel?.id == modelId) {
                 return Result.failure(IllegalStateException("Cannot delete currently active model"))
             }
-            
+
             modelRepository.deleteModel(modelId, deleteFiles)
         } catch (e: Exception) {
             Result.failure(e)
         }
     }
-    
+
     /**
      * Set a model as the current active model.
-     * 
+     *
      * @param modelId Model ID to set as current
      * @return Result indicating success or failure
      */
@@ -213,11 +213,11 @@ class DownloadModelUseCase @Inject constructor(
         return try {
             val model = modelRepository.getModel(modelId)
                 ?: return Result.failure(IllegalArgumentException("Model not found: $modelId"))
-            
+
             if (!model.isAvailable()) {
                 return Result.failure(IllegalStateException("Model is not available: $modelId"))
             }
-            
+
             modelRepository.setCurrentModel(modelId)
         } catch (e: Exception) {
             Result.failure(e)
@@ -232,35 +232,35 @@ sealed class ModelDownloadResult {
     data class InProgress(val progress: DownloadProgress) : ModelDownloadResult()
     data class Completed(val progress: DownloadProgress) : ModelDownloadResult()
     data class Failed(val progress: DownloadProgress) : ModelDownloadResult()
-    
+
     /**
      * Get the underlying download progress.
-     * 
+     *
      * @return DownloadProgress instance
      */
-    fun getProgress(): DownloadProgress = when (this) {
+    fun getDownloadProgress(): DownloadProgress = when (this) {
         is InProgress -> progress
         is Completed -> progress
         is Failed -> progress
     }
-    
+
     /**
      * Check if download is in progress.
-     * 
+     *
      * @return true if download is active
      */
     fun isInProgress(): Boolean = this is InProgress
-    
+
     /**
      * Check if download completed successfully.
-     * 
+     *
      * @return true if download completed
      */
     fun isCompleted(): Boolean = this is Completed
-    
+
     /**
      * Check if download failed.
-     * 
+     *
      * @return true if download failed
      */
     fun isFailed(): Boolean = this is Failed
@@ -279,10 +279,10 @@ data class DownloadCompatibility(
     val availableMemoryMB: Long,
     val warnings: List<String> = emptyList()
 ) {
-    
+
     /**
      * Get a human-readable compatibility summary.
-     * 
+     *
      * @return Compatibility summary string
      */
     fun getSummary(): String = buildString {
@@ -295,15 +295,15 @@ data class DownloadCompatibility(
             if (!hasEnoughMemory) issues.add("insufficient memory")
             append(issues.joinToString(", "))
         }
-        
+
         if (warnings.isNotEmpty()) {
             append("\nWarnings: ${warnings.joinToString("; ")}")
         }
     }
-    
+
     /**
      * Get formatted storage information.
-     * 
+     *
      * @return Storage info string
      */
     fun getStorageInfo(): String {
@@ -311,10 +311,10 @@ data class DownloadCompatibility(
         val availableMB = availableSpaceBytes / (1024 * 1024)
         return "Required: ${requiredMB}MB, Available: ${availableMB}MB"
     }
-    
+
     /**
      * Get formatted memory information.
-     * 
+     *
      * @return Memory info string
      */
     fun getMemoryInfo(): String {
