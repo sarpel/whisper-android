@@ -8,6 +8,7 @@ package com.app.whisper.data.local.database
 // import androidx.room.migration.Migration
 // import androidx.sqlite.db.SupportSQLiteDatabase
 import android.content.Context
+
 // import com.app.whisper.data.local.database.converter.Converters
 // import com.app.whisper.data.local.database.dao.ModelDao
 // import com.app.whisper.data.local.database.dao.TranscriptionDao
@@ -18,20 +19,13 @@ import android.content.Context
 /**
  * Room database for the Whisper Android application.
  *
- * This database stores transcription results, sessions, and model information
- * locally on the device using SQLite.
- *
- * Temporarily disabled for build fix - will be re-enabled after Room setup is complete.
+ * This database stores transcription results, sessions, and model information locally on the device
+ * using SQLite.
  */
-/*
 @Database(
-    entities = [
-        TranscriptionEntity::class,
-        TranscriptionSessionEntity::class,
-        WhisperModelEntity::class
-    ],
-    version = 1,
-    exportSchema = true
+        entities = [TranscriptionEntity::class, ModelEntity::class],
+        version = 1,
+        exportSchema = true
 )
 @TypeConverters(Converters::class)
 abstract class WhisperDatabase : RoomDatabase() {
@@ -42,8 +36,7 @@ abstract class WhisperDatabase : RoomDatabase() {
     companion object {
         private const val DATABASE_NAME = "whisper_database"
 
-        @Volatile
-        private var INSTANCE: WhisperDatabase? = null
+        @Volatile private var INSTANCE: WhisperDatabase? = null
 
         /**
          * Get the singleton database instance.
@@ -52,19 +45,21 @@ abstract class WhisperDatabase : RoomDatabase() {
          * @return WhisperDatabase instance
          */
         fun getDatabase(context: Context): WhisperDatabase {
-            return INSTANCE ?: synchronized(this) {
-                val instance = Room.databaseBuilder(
-                    context.applicationContext,
-                    WhisperDatabase::class.java,
-                    DATABASE_NAME
-                )
-                    .addMigrations(*getAllMigrations())
-                    .addCallback(DatabaseCallback())
-                    .build()
+            return INSTANCE
+                    ?: synchronized(this) {
+                        val instance =
+                                Room.databaseBuilder(
+                                                context.applicationContext,
+                                                WhisperDatabase::class.java,
+                                                DATABASE_NAME
+                                        )
+                                        .addMigrations(*getAllMigrations())
+                                        .addCallback(DatabaseCallback())
+                                        .build()
 
-                INSTANCE = instance
-                instance
-            }
+                        INSTANCE = instance
+                        instance
+                    }
         }
 
         /**
@@ -74,21 +69,17 @@ abstract class WhisperDatabase : RoomDatabase() {
          */
         private fun getAllMigrations(): Array<Migration> {
             return arrayOf(
-                // Future migrations will be added here
-            )
+                    // Future migrations will be added here
+                    )
         }
 
-        /**
-         * Clear the database instance (for testing).
-         */
+        /** Clear the database instance (for testing). */
         fun clearInstance() {
             INSTANCE = null
         }
     }
 
-    /**
-     * Database callback for initialization and other events.
-     */
+    /** Database callback for initialization and other events. */
     private class DatabaseCallback : RoomDatabase.Callback() {
 
         override fun onCreate(db: SupportSQLiteDatabase) {
@@ -105,30 +96,21 @@ abstract class WhisperDatabase : RoomDatabase() {
     }
 }
 
-/**
- * Database migration from version 1 to 2 (example for future use).
- */
-val MIGRATION_1_2 = object : Migration(1, 2) {
-    override fun migrate(database: SupportSQLiteDatabase) {
-        // Example migration - add new column to transcriptions table
-        // database.execSQL("ALTER TABLE transcriptions ADD COLUMN new_column TEXT")
-    }
-}
+/** Database migration from version 1 to 2 (example for future use). */
+val MIGRATION_1_2 =
+        object : Migration(1, 2) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Example migration - add new column to transcriptions table
+                // database.execSQL("ALTER TABLE transcriptions ADD COLUMN new_column TEXT")
+            }
+        }
 
-/**
- * Database migration from version 2 to 3 (example for future use).
- */
-val MIGRATION_2_3 = object : Migration(2, 3) {
-    override fun migrate(database: SupportSQLiteDatabase) {
-        // Example migration - create new table
-        // database.execSQL("CREATE TABLE new_table (id TEXT PRIMARY KEY NOT NULL, data TEXT)")
-    }
-}
-*/
-
-// Placeholder class for build fix
-class WhisperDatabase {
-    companion object {
-        fun getDatabase(context: Context): WhisperDatabase = WhisperDatabase()
-    }
-}
+/** Database migration from version 2 to 3 (example for future use). */
+val MIGRATION_2_3 =
+        object : Migration(2, 3) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                // Example migration - create new table
+                // database.execSQL("CREATE TABLE new_table (id TEXT PRIMARY KEY NOT NULL, data
+                // TEXT)")
+            }
+        }

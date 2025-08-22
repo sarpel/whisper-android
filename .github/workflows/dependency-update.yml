@@ -65,28 +65,31 @@ jobs:
     - name: Check for Dependency Updates
       id: check-updates
       run: |
-        # For now, we'll simulate dependency checking
-        # In a real implementation, you would use tools like Renovate or Dependabot
         echo "Checking for dependency updates..."
 
-        # Simulate finding updates (for demo purposes)
-        # In practice, this would parse actual dependency reports
-        RANDOM_CHECK=$((RANDOM % 10))
-        if [ $RANDOM_CHECK -gt 7 ]; then
-          echo "has-updates=true" >> $GITHUB_OUTPUT
-          echo "Found simulated dependency updates available"
+        # Run dependency updates check
+        ./gradlew dependencyUpdates
 
-          # Create summary
-          echo "update-summary<<EOF" >> $GITHUB_OUTPUT
-          echo "## 📦 Available Dependency Updates" >> $GITHUB_OUTPUT
-          echo "" >> $GITHUB_OUTPUT
-          echo "- androidx.compose:compose-bom: 2024.06.00 → 2024.08.00" >> $GITHUB_OUTPUT
-          echo "- androidx.core:core-ktx: 1.12.0 → 1.13.0" >> $GITHUB_OUTPUT
-          echo "- com.google.dagger:hilt-android: 2.48 → 2.49" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+        # Check if updates are available
+        if [ -f "build/dependencyUpdates/report.txt" ]; then
+          UPDATES=$(grep -c "available" build/dependencyUpdates/report.txt || echo "0")
+          if [ $UPDATES -gt 0 ]; then
+            echo "has-updates=true" >> $GITHUB_OUTPUT
+            echo "Found $UPDATES dependency updates available"
+
+            # Create summary
+            echo "update-summary<<EOF" >> $GITHUB_OUTPUT
+            echo "## 📦 Available Dependency Updates" >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+            grep -A 5 -B 1 "available" build/dependencyUpdates/report.txt | head -20 >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "has-updates=false" >> $GITHUB_OUTPUT
+            echo "No dependency updates available"
+          fi
         else
           echo "has-updates=false" >> $GITHUB_OUTPUT
-          echo "No dependency updates available"
+          echo "Could not check for updates"
         fi
 
     - name: Upload Dependency Report
