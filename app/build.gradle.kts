@@ -52,8 +52,8 @@ android {
             if (keystoreFile != null && keystorePassword != null && keyAlias != null && keyPassword != null) {
                 storeFile = file(keystoreFile)
                 storePassword = keystorePassword
-                keyAlias = keyAlias
-                keyPassword = keyPassword
+                this.keyAlias = keyAlias
+                this.keyPassword = keyPassword
 
                 // Enable v1 and v2 signing for maximum compatibility
                 enableV1Signing = true
@@ -64,8 +64,8 @@ android {
                 // Fallback to debug keystore for development
                 storeFile = file("debug.keystore")
                 storePassword = "android"
-                keyAlias = "androiddebugkey"
-                keyPassword = "android"
+                this.keyAlias = "androiddebugkey"
+                this.keyPassword = "android"
             }
         }
     }
@@ -108,7 +108,6 @@ android {
             // Debug-specific optimizations
             isMinifyEnabled = false
             isShrinkResources = false
-            isRenderscriptDebuggable = true
             isPseudoLocalesEnabled = true
         }
 
@@ -208,6 +207,8 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
+        resValues = true
     }
 
     composeOptions {
