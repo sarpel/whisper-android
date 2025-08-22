@@ -222,6 +222,13 @@ android {
     }
 }
 
+kapt {
+    correctErrorTypes = true
+    arguments {
+        arg("room.schemaLocation", "$projectDir/schemas")
+    }
+}
+
 dependencies {
     val composeBom = platform("androidx.compose:compose-bom:2024.06.00")
 
@@ -258,6 +265,7 @@ dependencies {
     // Network
     implementation("com.squareup.retrofit2:retrofit:2.9.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
 
     // JSON Serialization
     implementation("com.google.code.gson:gson:2.10.1")
@@ -269,10 +277,13 @@ dependencies {
     implementation("androidx.profileinstaller:profileinstaller:1.3.1")
     implementation("androidx.tracing:tracing:1.2.0")
 
-    // Room Database (temporarily disabled for build fix)
-    // implementation("androidx.room:room-runtime:2.6.1")
-    // implementation("androidx.room:room-ktx:2.6.1")
-    // kapt("androidx.room:room-compiler:2.6.1")
+    // Room Database
+    implementation("androidx.room:room-runtime:2.6.1")
+    implementation("androidx.room:room-ktx:2.6.1")
+    kapt("androidx.room:room-compiler:2.6.1")
+
+    // Security
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
     // Testing - Unit Tests
     testImplementation("junit:junit:4.13.2")

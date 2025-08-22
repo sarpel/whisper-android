@@ -27,7 +27,7 @@ import javax.inject.Singleton
 
 /**
  * Implementation of ModelRepository for managing Whisper model downloads and storage.
- * 
+ *
  * Handles model download operations, validation, storage management,
  * and cleanup operations with proper error handling and progress tracking.
  */
@@ -51,9 +51,9 @@ class ModelRepositoryImpl @Inject constructor(
         trace("ModelRepositoryImpl.downloadModel") {
             try {
                 Timber.d("Starting download for model: ${model.name}")
-                
+
                 val modelFile = File(modelsDir, "${model.name}.bin")
-                
+
                 // Check if model already exists and is valid
                 if (modelFile.exists() && validateModel(model, modelFile)) {
                     emit(DownloadProgress(
@@ -65,7 +65,7 @@ class ModelRepositoryImpl @Inject constructor(
                     ))
                     return@trace
                 }
-                
+
                 emit(DownloadProgress(
                     modelId = model.id,
                     progress = 0f,
@@ -73,14 +73,14 @@ class ModelRepositoryImpl @Inject constructor(
                     totalBytes = model.fileSizeBytes,
                     status = DownloadStatus.PENDING
                 ))
-                
+
                 // Create HTTP request
                 val request = Request.Builder()
                     .url(model.downloadUrl)
                     .build()
-                
+
                 val response = httpClient.newCall(request).execute()
-                
+
                 if (!response.isSuccessful) {
                     emit(DownloadProgress(
                         modelId = model.id,
@@ -92,10 +92,10 @@ class ModelRepositoryImpl @Inject constructor(
                     ))
                     return@trace
                 }
-                
+
                 val responseBody = response.body ?: throw IOException("Empty response body")
                 val totalBytes = responseBody.contentLength()
-                
+
                 emit(DownloadProgress(
                     modelId = model.id,
                     progress = 0f,
@@ -103,24 +103,24 @@ class ModelRepositoryImpl @Inject constructor(
                     totalBytes = totalBytes,
                     status = DownloadStatus.DOWNLOADING
                 ))
-                
+
                 // Download with progress tracking
                 responseBody.byteStream().use { inputStream ->
                     FileOutputStream(modelFile).use { outputStream ->
                         val buffer = ByteArray(8192)
                         var downloadedBytes = 0L
                         var bytesRead: Int
-                        
+
                         while (inputStream.read(buffer).also { bytesRead = it } != -1) {
                             outputStream.write(buffer, 0, bytesRead)
                             downloadedBytes += bytesRead
-                            
+
                             val progress = if (totalBytes > 0) {
                                 downloadedBytes.toFloat() / totalBytes.toFloat()
                             } else {
                                 0f
                             }
-                            
+
                             emit(DownloadProgress(
                                 modelId = model.id,
                                 progress = progress,
@@ -132,15 +132,15 @@ class ModelRepositoryImpl @Inject constructor(
                         }
                     }
                 }
-                
+
                 // Validate downloaded model
                 if (validateModel(model, modelFile)) {
                     // Update model status
                     model.updateStatus(com.app.whisper.domain.entity.ModelStatus.Available, modelFile.absolutePath)
-                    
+
                     // Save to database
                     saveModelToDatabase(model, modelFile)
-                    
+
                     emit(DownloadProgress(
                         modelId = model.id,
                         progress = 1.0f,
@@ -148,12 +148,12 @@ class ModelRepositoryImpl @Inject constructor(
                         totalBytes = modelFile.length(),
                         status = DownloadStatus.COMPLETED
                     ))
-                    
+
                     Timber.d("Successfully downloaded model: ${model.name}")
                 } else {
                     // Delete invalid file
                     modelFile.delete()
-                    
+
                     emit(DownloadProgress(
                         modelId = model.id,
                         progress = 0f,
@@ -163,7 +163,7 @@ class ModelRepositoryImpl @Inject constructor(
                         error = "Model validation failed"
                     ))
                 }
-                
+
             } catch (e: Exception) {
                 Timber.e(e, "Failed to download model: ${model.name}")
                 emit(DownloadProgress(
@@ -182,20 +182,20 @@ class ModelRepositoryImpl @Inject constructor(
         trace("ModelRepositoryImpl.deleteModel") {
             try {
                 val modelFile = File(modelsDir, "${model.name}.bin")
-                
+
                 if (modelFile.exists()) {
                     val deleted = modelFile.delete()
                     if (!deleted) {
                         return@trace Result.failure(IOException("Failed to delete model file"))
                     }
                 }
-                
+
                 // Update model status
                 model.updateStatus(com.app.whisper.domain.entity.ModelStatus.NotDownloaded, null)
-                
+
                 // Remove from database
                 modelDao.deleteModel(model.id)
-                
+
                 Timber.d("Successfully deleted model: ${model.name}")
                 Result.success(Unit)
             } catch (e: Exception) {
@@ -236,10 +236,10 @@ class ModelRepositoryImpl @Inject constructor(
             val totalSpace = modelsDir.totalSpace
             val freeSpace = modelsDir.freeSpace
             val usedSpace = totalSpace - freeSpace
-            
+
             val modelFiles = modelsDir.listFiles()?.filter { it.name.endsWith(".bin") } ?: emptyList()
             val modelsSize = modelFiles.sumOf { it.length() }
-            
+
             ModelStorageInfo(
                 totalSpaceBytes = totalSpace,
                 freeSpaceBytes = freeSpace,
@@ -255,11 +255,11 @@ class ModelRepositoryImpl @Inject constructor(
             try {
                 val modelEntities = modelDao.getAllModelsSync()
                 val sortedByLastUsed = modelEntities.sortedByDescending { it.lastUsedAt }
-                
+
                 val toDelete = sortedByLastUsed.drop(keepRecentCount)
                 var deletedCount = 0
                 var freedBytes = 0L
-                
+
                 for (entity in toDelete) {
                     val modelFile = File(entity.localPath ?: continue)
                     if (modelFile.exists()) {
@@ -271,13 +271,13 @@ class ModelRepositoryImpl @Inject constructor(
                         }
                     }
                 }
-                
+
                 val cleanupInfo = CleanupInfo(
                     deletedModelCount = deletedCount,
                     freedSpaceBytes = freedBytes,
                     remainingModelCount = modelEntities.size - deletedCount
                 )
-                
+
                 Timber.d("Cleanup completed: $cleanupInfo")
                 Result.success(cleanupInfo)
             } catch (e: Exception) {
@@ -289,13 +289,13 @@ class ModelRepositoryImpl @Inject constructor(
 
     private fun validateModel(model: WhisperModel, file: File): Boolean {
         if (!file.exists()) return false
-        
+
         // Check file size
         if (file.length() != model.fileSizeBytes) {
             Timber.w("Model file size mismatch: expected ${model.fileSizeBytes}, got ${file.length()}")
             return false
         }
-        
+
         // TODO: Implement checksum validation when checksums are available
         // For now, just check if file exists and has correct size
         return true
@@ -312,7 +312,7 @@ class ModelRepositoryImpl @Inject constructor(
                 lastUsedAt = System.currentTimeMillis(),
                 fileSizeBytes = file.length()
             )
-            
+
             modelDao.insertModel(entity)
         } catch (e: Exception) {
             Timber.e(e, "Failed to save model to database")

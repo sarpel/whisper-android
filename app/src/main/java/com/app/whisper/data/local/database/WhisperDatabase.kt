@@ -1,20 +1,17 @@
 package com.app.whisper.data.local.database
 
-// Temporarily disabled Room for build fix
-// import androidx.room.Database
-// import androidx.room.Room
-// import androidx.room.RoomDatabase
-// import androidx.room.TypeConverters
-// import androidx.room.migration.Migration
-// import androidx.sqlite.db.SupportSQLiteDatabase
+import androidx.room.Database
+import androidx.room.Room
+import androidx.room.RoomDatabase
+import androidx.room.TypeConverters
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import android.content.Context
 
-// import com.app.whisper.data.local.database.converter.Converters
-// import com.app.whisper.data.local.database.dao.ModelDao
-// import com.app.whisper.data.local.database.dao.TranscriptionDao
-// import com.app.whisper.data.local.database.entity.TranscriptionEntity
-// import com.app.whisper.data.local.database.entity.TranscriptionSessionEntity
-// import com.app.whisper.data.local.database.entity.WhisperModelEntity
+import com.app.whisper.data.local.database.dao.ModelDao
+import com.app.whisper.data.local.database.dao.TranscriptionDao
+import com.app.whisper.data.local.database.entity.TranscriptionEntity
+import com.app.whisper.data.local.database.entity.ModelEntity
 
 /**
  * Room database for the Whisper Android application.

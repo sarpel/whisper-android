@@ -4,6 +4,9 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import com.app.whisper.data.local.database.WhisperDatabase
+import com.app.whisper.data.local.database.dao.ModelDao
+import com.app.whisper.data.local.database.dao.TranscriptionDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
