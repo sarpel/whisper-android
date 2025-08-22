@@ -1,14 +1,15 @@
 package com.app.whisper.domain.entity
 
+import java.text.DecimalFormat
+
 /**
- * Domain entity representing a Whisper model.
- * 
- * This entity encapsulates all information about a Whisper model including
- * its metadata, download status, file information, and capabilities.
+ * Enum representing available Whisper models with their characteristics.
+ *
+ * Each model has different accuracy, speed, and size trade-offs.
+ * Larger models provide better accuracy but require more storage and processing power.
  */
-data class WhisperModel(
+enum class WhisperModel(
     val id: String,
-    val name: String,
     val displayName: String,
     val description: String,
     val size: ModelSize,
@@ -18,40 +19,180 @@ data class WhisperModel(
     val checksum: String,
     val isMultilingual: Boolean,
     val supportedLanguages: List<String>,
-    val status: ModelStatus = ModelStatus.NOT_DOWNLOADED,
-    val localPath: String? = null,
-    val downloadedAt: Long? = null,
-    val lastUsedAt: Long? = null,
-    val metadata: ModelMetadata = ModelMetadata()
+    val recommendedUseCase: String
 ) {
-    
+    TINY(
+        id = "tiny",
+        displayName = "Tiny",
+        description = "Fastest model with basic accuracy. Good for real-time transcription.",
+        size = ModelSize.TINY,
+        fileSizeBytes = 39_000_000L, // ~39MB
+        downloadUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin",
+        version = "1.0.0",
+        checksum = "bd577a113a864445d4c299885e0cb97d4ba92b5f",
+        isMultilingual = false,
+        supportedLanguages = listOf("en"),
+        recommendedUseCase = "Quick transcription, real-time use"
+    ),
+
+    BASE(
+        id = "base",
+        displayName = "Base",
+        description = "Balanced model with good accuracy and reasonable speed.",
+        size = ModelSize.BASE,
+        fileSizeBytes = 142_000_000L, // ~142MB
+        downloadUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin",
+        version = "1.0.0",
+        checksum = "465707469ff3a37a2b9b8d8f89f2f99de7299dac",
+        isMultilingual = true,
+        supportedLanguages = listOf(
+            "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr", "pl", "ca", "nl",
+            "ar", "sv", "it", "id", "hi", "fi", "vi", "he", "uk", "el", "ms", "cs", "ro",
+            "da", "hu", "ta", "no", "th", "ur", "hr", "bg", "lt", "la", "mi", "ml", "cy",
+            "sk", "te", "fa", "lv", "bn", "sr", "az", "sl", "kn", "et", "mk", "br", "eu",
+            "is", "hy", "ne", "mn", "bs", "kk", "sq", "sw", "gl", "mr", "pa", "si", "km",
+            "sn", "yo", "so", "af", "oc", "ka", "be", "tg", "sd", "gu", "am", "yi", "lo",
+            "uz", "fo", "ht", "ps", "tk", "nn", "mt", "sa", "lb", "my", "bo", "tl", "mg",
+            "as", "tt", "haw", "ln", "ha", "ba", "jw", "su"
+        ),
+        recommendedUseCase = "General purpose transcription"
+    ),
+
+    SMALL(
+        id = "small",
+        displayName = "Small",
+        description = "Higher accuracy model with moderate speed. Good balance for most use cases.",
+        size = ModelSize.SMALL,
+        fileSizeBytes = 466_000_000L, // ~466MB
+        downloadUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin",
+        version = "1.0.0",
+        checksum = "55356645c2b361a969dfd0ef2c5a50d530afd8d5",
+        isMultilingual = true,
+        supportedLanguages = listOf(
+            "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr", "pl", "ca", "nl",
+            "ar", "sv", "it", "id", "hi", "fi", "vi", "he", "uk", "el", "ms", "cs", "ro",
+            "da", "hu", "ta", "no", "th", "ur", "hr", "bg", "lt", "la", "mi", "ml", "cy",
+            "sk", "te", "fa", "lv", "bn", "sr", "az", "sl", "kn", "et", "mk", "br", "eu",
+            "is", "hy", "ne", "mn", "bs", "kk", "sq", "sw", "gl", "mr", "pa", "si", "km",
+            "sn", "yo", "so", "af", "oc", "ka", "be", "tg", "sd", "gu", "am", "yi", "lo",
+            "uz", "fo", "ht", "ps", "tk", "nn", "mt", "sa", "lb", "my", "bo", "tl", "mg",
+            "as", "tt", "haw", "ln", "ha", "ba", "jw", "su"
+        ),
+        recommendedUseCase = "High-quality multilingual transcription"
+    ),
+
+    MEDIUM(
+        id = "medium",
+        displayName = "Medium",
+        description = "High accuracy model with slower processing. Best for quality-focused use cases.",
+        size = ModelSize.MEDIUM,
+        fileSizeBytes = 1_420_000_000L, // ~1.42GB
+        downloadUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin",
+        version = "1.0.0",
+        checksum = "fd9727b6e1217c2f614f9b698455c4ffd82463b4",
+        isMultilingual = true,
+        supportedLanguages = listOf(
+            "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr", "pl", "ca", "nl",
+            "ar", "sv", "it", "id", "hi", "fi", "vi", "he", "uk", "el", "ms", "cs", "ro",
+            "da", "hu", "ta", "no", "th", "ur", "hr", "bg", "lt", "la", "mi", "ml", "cy",
+            "sk", "te", "fa", "lv", "bn", "sr", "az", "sl", "kn", "et", "mk", "br", "eu",
+            "is", "hy", "ne", "mn", "bs", "kk", "sq", "sw", "gl", "mr", "pa", "si", "km",
+            "sn", "yo", "so", "af", "oc", "ka", "be", "tg", "sd", "gu", "am", "yi", "lo",
+            "uz", "fo", "ht", "ps", "tk", "nn", "mt", "sa", "lb", "my", "bo", "tl", "mg",
+            "as", "tt", "haw", "ln", "ha", "ba", "jw", "su"
+        ),
+        recommendedUseCase = "Professional multilingual transcription"
+    ),
+
+    LARGE(
+        id = "large-v2",
+        displayName = "Large",
+        description = "Highest accuracy model with slowest processing. Best for critical applications.",
+        size = ModelSize.LARGE,
+        fileSizeBytes = 2_900_000_000L, // ~2.9GB
+        downloadUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v2.bin",
+        version = "2.0.0",
+        checksum = "0f4c8e34f21cf1a914c59d8b3ce882345ad349d6",
+        isMultilingual = true,
+        supportedLanguages = listOf(
+            "en", "zh", "de", "es", "ru", "ko", "fr", "ja", "pt", "tr", "pl", "ca", "nl",
+            "ar", "sv", "it", "id", "hi", "fi", "vi", "he", "uk", "el", "ms", "cs", "ro",
+            "da", "hu", "ta", "no", "th", "ur", "hr", "bg", "lt", "la", "mi", "ml", "cy",
+            "sk", "te", "fa", "lv", "bn", "sr", "az", "sl", "kn", "et", "mk", "br", "eu",
+            "is", "hy", "ne", "mn", "bs", "kk", "sq", "sw", "gl", "mr", "pa", "si", "km",
+            "sn", "yo", "so", "af", "oc", "ka", "be", "tg", "sd", "gu", "am", "yi", "lo",
+            "uz", "fo", "ht", "ps", "tk", "nn", "mt", "sa", "lb", "my", "bo", "tl", "mg",
+            "as", "tt", "haw", "ln", "ha", "ba", "jw", "su"
+        ),
+        recommendedUseCase = "State-of-the-art multilingual transcription"
+    );
+
     /**
-     * Check if the model is available for use.
-     * 
-     * @return true if model is downloaded and ready
+     * Get formatted file size string.
      */
-    fun isAvailable(): Boolean = status == ModelStatus.DOWNLOADED && localPath != null
-    
+    fun getFileSizeFormatted(): String {
+        val df = DecimalFormat("#.#")
+        return when {
+            fileSizeBytes >= 1_000_000_000 -> "${df.format(fileSizeBytes / 1_000_000_000.0)} GB"
+            fileSizeBytes >= 1_000_000 -> "${df.format(fileSizeBytes / 1_000_000.0)} MB"
+            fileSizeBytes >= 1_000 -> "${df.format(fileSizeBytes / 1_000.0)} KB"
+            else -> "$fileSizeBytes B"
+        }
+    }
+
     /**
-     * Check if the model is currently being downloaded.
-     * 
-     * @return true if download is in progress
+     * Get model status (will be set by ModelManager).
      */
-    fun isDownloading(): Boolean = status == ModelStatus.DOWNLOADING
-    
+    var status: ModelStatus = ModelStatus.NotDownloaded
+        internal set
+
     /**
-     * Check if the model supports a specific language.
-     * 
-     * @param languageCode Language code to check (e.g., "en", "tr")
-     * @return true if language is supported
+     * Get local file path (will be set by ModelManager).
+     */
+    var localPath: String? = null
+        internal set
+
+    /**
+     * Get download timestamp (will be set by ModelManager).
+     */
+    var downloadedAt: Long? = null
+        internal set
+
+    /**
+     * Get last used timestamp (will be set by ModelManager).
+     */
+    var lastUsedAt: Long? = null
+        internal set
+
+    /**
+     * Get model metadata (will be set by ModelManager).
+     */
+    var metadata: ModelMetadata? = null
+        internal set
+
+    /**
+     * Check if model is currently selected.
+     */
+    var isCurrent: Boolean = false
+        internal set
+
+    /**
+     * Check if model supports a specific language.
      */
     fun supportsLanguage(languageCode: String): Boolean {
-        return isMultilingual || supportedLanguages.contains(languageCode.lowercase())
+        return supportedLanguages.contains(languageCode.lowercase())
     }
-    
+
+    /**
+     * Check if model is available for use.
+     */
+    fun isAvailable(): Boolean {
+        return status == ModelStatus.Available && localPath != null
+    }
+
     /**
      * Get the model size in a human-readable format.
-     * 
+     *
      * @return Formatted size string (e.g., "39 MB", "1.5 GB")
      */
     fun getFormattedSize(): String {
@@ -61,10 +202,10 @@ data class WhisperModel(
             else -> String.format("%.1f GB", fileSizeBytes / (1024.0 * 1024.0 * 1024.0))
         }
     }
-    
+
     /**
      * Get the expected transcription quality level.
-     * 
+     *
      * @return Quality level based on model size
      */
     fun getQualityLevel(): QualityLevel = when (size) {
@@ -74,10 +215,10 @@ data class WhisperModel(
         ModelSize.MEDIUM -> QualityLevel.HIGH
         ModelSize.LARGE -> QualityLevel.EXCELLENT
     }
-    
+
     /**
      * Get the expected processing speed relative to real-time.
-     * 
+     *
      * @return Speed multiplier (e.g., 2.0 means 2x faster than real-time)
      */
     fun getExpectedSpeed(): Float = when (size) {
@@ -87,10 +228,10 @@ data class WhisperModel(
         ModelSize.MEDIUM -> 1.0f
         ModelSize.LARGE -> 0.5f
     }
-    
+
     /**
      * Check if this model is recommended for the current device.
-     * 
+     *
      * @param availableMemoryMB Available device memory in MB
      * @param preferSpeed Whether to prefer speed over quality
      * @return true if model is recommended
@@ -98,17 +239,17 @@ data class WhisperModel(
     fun isRecommendedFor(availableMemoryMB: Long, preferSpeed: Boolean = false): Boolean {
         val requiredMemoryMB = getRequiredMemoryMB()
         val hasEnoughMemory = availableMemoryMB >= requiredMemoryMB * 1.5 // 50% buffer
-        
+
         return if (preferSpeed) {
             hasEnoughMemory && (size == ModelSize.TINY || size == ModelSize.BASE)
         } else {
             hasEnoughMemory
         }
     }
-    
+
     /**
      * Get the estimated memory requirement for this model.
-     * 
+     *
      * @return Required memory in MB
      */
     fun getRequiredMemoryMB(): Long = when (size) {
@@ -118,10 +259,10 @@ data class WhisperModel(
         ModelSize.MEDIUM -> 512L
         ModelSize.LARGE -> 1024L
     }
-    
+
     /**
      * Create a copy with updated status.
-     * 
+     *
      * @param newStatus New model status
      * @param localPath Local file path (for downloaded models)
      * @return Updated model instance
@@ -131,14 +272,14 @@ data class WhisperModel(
         localPath = localPath,
         downloadedAt = if (newStatus == ModelStatus.DOWNLOADED) System.currentTimeMillis() else downloadedAt
     )
-    
+
     /**
      * Create a copy with updated last used timestamp.
-     * 
+     *
      * @return Updated model instance
      */
     fun withLastUsed(): WhisperModel = copy(lastUsedAt = System.currentTimeMillis())
-    
+
     companion object {
         /**
          * Create a Whisper model instance for the tiny model.
@@ -156,7 +297,7 @@ data class WhisperModel(
             isMultilingual = false,
             supportedLanguages = listOf("en")
         )
-        
+
         /**
          * Create a Whisper model instance for the base model.
          */
@@ -173,7 +314,7 @@ data class WhisperModel(
             isMultilingual = true,
             supportedLanguages = listOf("en", "tr", "de", "fr", "es", "it", "pt", "ru", "ja", "ko", "zh")
         )
-        
+
         /**
          * Create a Whisper model instance for the small model.
          */
@@ -190,17 +331,17 @@ data class WhisperModel(
             isMultilingual = true,
             supportedLanguages = listOf("en", "tr", "de", "fr", "es", "it", "pt", "ru", "ja", "ko", "zh")
         )
-        
+
         /**
          * Get all available model presets.
-         * 
+         *
          * @return List of all available models
          */
         fun getAllModels(): List<WhisperModel> = listOf(tiny(), base(), small())
-        
+
         /**
          * Get the recommended model for a device with specific constraints.
-         * 
+         *
          * @param availableMemoryMB Available device memory in MB
          * @param preferSpeed Whether to prioritize speed over quality
          * @return Recommended model
@@ -258,10 +399,10 @@ data class ModelMetadata(
     val author: String = "OpenAI",
     val notes: String = ""
 ) {
-    
+
     /**
      * Get a formatted parameter count string.
-     * 
+     *
      * @return Formatted parameter count (e.g., "39M", "1.5B")
      */
     fun getFormattedParameters(): String = when {
