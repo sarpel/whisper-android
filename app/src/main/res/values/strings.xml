@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Whisper Android</string>
+    
+    <!-- Main Screen -->
+    <string name="transcription_title">Whisper Transcription</string>
+    <string name="model_settings">Model Settings</string>
+    <string name="toggle_theme">Toggle Theme</string>
+    <string name="model_ready">Ready</string>
+    <string name="language_auto">Auto</string>
+    <string name="translate">Translate</string>
+    <string name="transcription">Transcription</string>
+    <string name="copy">Copy</string>
+    <string name="share">Share</string>
+    <string name="choose_file">Choose File</string>
+    <string name="record">Record</string>
+    <string name="stop">Stop</string>
+    <string name="dismiss">Dismiss</string>
+    
+    <!-- Placeholder texts -->
+    <string name="no_transcription_yet">No transcription yet. Press the record button to start.</string>
+    <string name="processing">Processing audio...</string>
+    
+    <!-- Error messages -->
+    <string name="error_model_loading">Failed to load Whisper model</string>
+    <string name="error_recording">Failed to start recording</string>
+    <string name="error_transcription">Failed to transcribe audio</string>
+    <string name="error_permission_denied">Microphone permission is required</string>
+    <string name="error_file_not_found">Audio file not found</string>
+    
+    <!-- Model names -->
+    <string name="model_tiny">Tiny (39 MB)</string>
+    <string name="model_base">Base (74 MB)</string>
+    <string name="model_small">Small (244 MB)</string>
+    <string name="model_medium">Medium (769 MB)</string>
+    <string name="model_large">Large v3 (1.5 GB)</string>
+    
+    <!-- Permissions -->
+    <string name="permission_microphone_title">Microphone Permission</string>
+    <string name="permission_microphone_message">This app needs microphone access to record audio for transcription.</string>
+    <string name="permission_storage_title">Storage Permission</string>
+    <string name="permission_storage_message">This app needs storage access to save and load audio files.</string>
+    
+    <!-- Content descriptions for accessibility -->
+    <string name="cd_record_button">Record audio button</string>
+    <string name="cd_stop_button">Stop recording button</string>
+    <string name="cd_file_picker_button">Choose audio file button</string>
+    <string name="cd_settings_button">Settings button</string>
+    <string name="cd_theme_toggle_button">Toggle theme button</string>
+    <string name="cd_copy_button">Copy transcription button</string>
+    <string name="cd_share_button">Share transcription button</string>
+    <string name="cd_waveform">Audio waveform visualization</string>
+</resources>

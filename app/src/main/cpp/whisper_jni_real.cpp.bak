@@ -1,0 +1,211 @@
+#include <jni.h>
+#include <android/log.h>
+#include <whisper.h>
+#include <string>
+#include <vector>
+#include <memory>
+#include <cmath>
+
+#define LOG_TAG "WhisperJNI"
+#define LOGI(...) __android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
+#define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
+#define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
+
+extern "C" {
+
+/**
+ * Get version information from whisper.cpp
+ */
+JNIEXPORT jstring JNICALL
+Java_com_app_whisper_native_WhisperNative_getVersionInfo(
+    JNIEnv* env,
+    jobject /* this */) {
+
+    LOGI("Getting Whisper version info");
+
+    std::string version = "Whisper.cpp Android v1.0.0 - Build: ";
+    version += __DATE__;
+    version += " ";
+    version += __TIME__;
+
+    return env->NewStringUTF(version.c_str());
+}
+
+/**
+ * Initialize Whisper context from model file
+ */
+JNIEXPORT jlong JNICALL
+Java_com_app_whisper_native_WhisperNative_initContext(
+    JNIEnv* env,
+    jobject /* this */,
+    jstring model_path,
+    jint n_threads) {
+
+    const char* path = env->GetStringUTFChars(model_path, nullptr);
+    LOGI("Initializing Whisper context from: %s", path);
+
+    // Configure context parameters for ARM v8 optimization
+    struct whisper_context_params cparams = whisper_context_default_params();
+    cparams.use_gpu = false;  // CPU only for compatibility
+
+    // Initialize context
+    struct whisper_context* ctx = whisper_init_from_file_with_params(path, cparams);
+
+    env->ReleaseStringUTFChars(model_path, path);
+
+    if (ctx == nullptr) {
+        LOGE("Failed to initialize Whisper context");
+        return 0;
+    }
+
+    LOGI("Whisper context initialized successfully");
+    return reinterpret_cast<jlong>(ctx);
+}
+
+/**
+ * Transcribe audio data using Whisper
+ */
+JNIEXPORT jstring JNICALL
+Java_com_app_whisper_native_WhisperNative_transcribeAudio(
+    JNIEnv* env,
+    jobject /* this */,
+    jlong context_ptr,
+    jfloatArray audio_data,
+    jint sample_rate,
+    jstring language,
+    jboolean translate) {
+
+    struct whisper_context* ctx = reinterpret_cast<whisper_context*>(context_ptr);
+    if (ctx == nullptr) {
+        LOGE("Invalid Whisper context");
+        return env->NewStringUTF("");
+    }
+
+    // Get audio data
+    jsize audio_length = env->GetArrayLength(audio_data);
+    jfloat* audio = env->GetFloatArrayElements(audio_data, nullptr);
+
+    if (audio == nullptr) {
+        LOGE("Failed to get audio data");
+        return env->NewStringUTF("");
+    }
+
+    LOGI("Transcribing audio: %d samples at %d Hz", audio_length, sample_rate);
+
+    // Configure whisper parameters for ARM v8 optimization
+    struct whisper_full_params wparams = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
+
+    // ARM v8 optimizations
+    wparams.n_threads = 4;  // Optimal for most ARM v8 devices
+    wparams.translate = translate;
+    wparams.print_progress = false;
+    wparams.print_timestamps = false;
+    wparams.print_realtime = false;
+    wparams.print_special = false;
+
+    // Set language if specified
+    const char* lang = nullptr;
+    if (language != nullptr) {
+        lang = env->GetStringUTFChars(language, nullptr);
+        if (strcmp(lang, "auto") != 0) {
+            wparams.language = lang;
+        }
+    }
+
+    // Process audio
+    int result = whisper_full(ctx, wparams, audio, audio_length);
+
+    std::string transcription;
+    if (result == 0) {
+        // Extract transcription text
+        int n_segments = whisper_full_n_segments(ctx);
+        LOGI("Transcription completed: %d segments", n_segments);
+
+        for (int i = 0; i < n_segments; ++i) {
+            const char* text = whisper_full_get_segment_text(ctx, i);
+            if (text != nullptr) {
+                transcription += text;
+                if (i < n_segments - 1) {
+                    transcription += " ";
+                }
+            }
+        }
+    } else {
+        LOGE("Transcription failed with error code: %d", result);
+        transcription = "";
+    }
+
+    // Cleanup
+    env->ReleaseFloatArrayElements(audio_data, audio, JNI_ABORT);
+    if (lang != nullptr) {
+        env->ReleaseStringUTFChars(language, lang);
+    }
+
+    LOGI("Transcription result: %s", transcription.c_str());
+    return env->NewStringUTF(transcription.c_str());
+}
+
+/**
+ * Release Whisper context and free resources
+ */
+JNIEXPORT void JNICALL
+Java_com_app_whisper_native_WhisperNative_releaseContext(
+    JNIEnv* env,
+    jobject /* this */,
+    jlong context_ptr) {
+
+    struct whisper_context* ctx = reinterpret_cast<whisper_context*>(context_ptr);
+    if (ctx != nullptr) {
+        LOGI("Releasing Whisper context");
+        whisper_free(ctx);
+    } else {
+        LOGD("Context already null, nothing to release");
+    }
+}
+
+/**
+ * Get model information
+ */
+JNIEXPORT jstring JNICALL
+Java_com_app_whisper_native_WhisperNative_getModelInfo(
+    JNIEnv* env,
+    jobject /* this */,
+    jlong context_ptr) {
+
+    struct whisper_context* ctx = reinterpret_cast<whisper_context*>(context_ptr);
+    if (ctx == nullptr) {
+        return env->NewStringUTF("No model loaded");
+    }
+
+    // Get model information (using available API functions)
+    int n_vocab = whisper_n_vocab(ctx);
+    int n_audio_ctx = whisper_n_audio_ctx(ctx);
+    int n_text_ctx = whisper_n_text_ctx(ctx);
+    int n_len = whisper_n_len(ctx);  // mel length
+
+    char info[512];
+    snprintf(info, sizeof(info),
+        "vocab: %d, audio_ctx: %d, text_ctx: %d, mel_length: %d",
+        n_vocab, n_audio_ctx, n_text_ctx, n_len);
+
+    return env->NewStringUTF(info);
+}
+
+/**
+ * Check if model supports multilingual
+ */
+JNIEXPORT jboolean JNICALL
+Java_com_app_whisper_native_WhisperNative_isMultilingual(
+    JNIEnv* env,
+    jobject /* this */,
+    jlong context_ptr) {
+
+    struct whisper_context* ctx = reinterpret_cast<whisper_context*>(context_ptr);
+    if (ctx == nullptr) {
+        return JNI_FALSE;
+    }
+
+    return whisper_is_multilingual(ctx) ? JNI_TRUE : JNI_FALSE;
+}
+
+} // extern "C"
