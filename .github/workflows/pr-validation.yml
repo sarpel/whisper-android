@@ -1,0 +1,381 @@
+name: Pull Request Validation
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+env:
+  GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2
+  GRADLE_USER_HOME: ${{ github.workspace }}/.gradle
+
+# Cancel previous runs for the same PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  # ==============================================================================
+  # PR Information and Validation
+  # ==============================================================================
+  pr-info:
+    name: PR Information
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false
+    
+    outputs:
+      changed-files: ${{ steps.changes.outputs.changed-files }}
+      has-android-changes: ${{ steps.changes.outputs.has-android-changes }}
+      has-native-changes: ${{ steps.changes.outputs.has-native-changes }}
+      has-docs-changes: ${{ steps.changes.outputs.has-docs-changes }}
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Analyze Changed Files
+      id: changes
+      run: |
+        # Get list of changed files
+        CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+        echo "changed-files<<EOF" >> $GITHUB_OUTPUT
+        echo "$CHANGED_FILES" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+        # Check for Android code changes
+        if echo "$CHANGED_FILES" | grep -E '\.(kt|java|xml|gradle)$' > /dev/null; then
+          echo "has-android-changes=true" >> $GITHUB_OUTPUT
+        else
+          echo "has-android-changes=false" >> $GITHUB_OUTPUT
+        fi
+        
+        # Check for native code changes
+        if echo "$CHANGED_FILES" | grep -E '\.(cpp|c|h|cmake)$|CMakeLists\.txt' > /dev/null; then
+          echo "has-native-changes=true" >> $GITHUB_OUTPUT
+        else
+          echo "has-native-changes=false" >> $GITHUB_OUTPUT
+        fi
+        
+        # Check for documentation changes
+        if echo "$CHANGED_FILES" | grep -E '\.(md|txt)$|docs/' > /dev/null; then
+          echo "has-docs-changes=true" >> $GITHUB_OUTPUT
+        else
+          echo "has-docs-changes=false" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: PR Size Analysis
+      run: |
+        CHANGED_FILES_COUNT=$(echo "${{ steps.changes.outputs.changed-files }}" | wc -l)
+        ADDITIONS=$(git diff --numstat origin/${{ github.base_ref }}...HEAD | awk '{sum += $1} END {print sum}')
+        DELETIONS=$(git diff --numstat origin/${{ github.base_ref }}...HEAD | awk '{sum += $2} END {print sum}')
+        
+        echo "📊 **PR Size Analysis**" >> $GITHUB_STEP_SUMMARY
+        echo "- **Files Changed**: $CHANGED_FILES_COUNT" >> $GITHUB_STEP_SUMMARY
+        echo "- **Lines Added**: $ADDITIONS" >> $GITHUB_STEP_SUMMARY
+        echo "- **Lines Deleted**: $DELETIONS" >> $GITHUB_STEP_SUMMARY
+        
+        # Warn about large PRs
+        if [ $CHANGED_FILES_COUNT -gt 50 ] || [ $ADDITIONS -gt 1000 ]; then
+          echo "⚠️ **Large PR Warning**: This PR is quite large. Consider breaking it into smaller PRs for easier review." >> $GITHUB_STEP_SUMMARY
+        fi
+
+  # ==============================================================================
+  # Fast Quality Checks
+  # ==============================================================================
+  quick-checks:
+    name: Quick Quality Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: pr-info
+    if: needs.pr-info.outputs.has-android-changes == 'true'
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: Setup JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+    
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+    
+    - name: Cache Gradle Dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+          .gradle
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        restore-keys: |
+          ${{ runner.os }}-gradle-
+    
+    - name: Make Gradle Wrapper Executable
+      run: chmod +x ./gradlew
+    
+    - name: Compile Debug
+      run: ./gradlew compileDebugKotlin compileDebugJavaWithJavac
+    
+    - name: Run Ktlint
+      run: ./gradlew ktlintCheck
+      continue-on-error: true
+    
+    - name: Quick Lint Check
+      run: ./gradlew lintDebug -x test
+      continue-on-error: true
+
+  # ==============================================================================
+  # Unit Tests (Focused)
+  # ==============================================================================
+  focused-tests:
+    name: Focused Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [pr-info, quick-checks]
+    if: needs.pr-info.outputs.has-android-changes == 'true'
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: Setup JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+    
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+    
+    - name: Cache Gradle Dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+          .gradle
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        restore-keys: |
+          ${{ runner.os }}-gradle-
+    
+    - name: Make Gradle Wrapper Executable
+      run: chmod +x ./gradlew
+    
+    - name: Run Unit Tests
+      run: ./gradlew testDebugUnitTest --continue
+    
+    - name: Upload Test Results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: pr-test-results
+        path: app/build/reports/tests/
+        retention-days: 7
+
+  # ==============================================================================
+  # Build Validation
+  # ==============================================================================
+  build-validation:
+    name: Build Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: [pr-info, quick-checks]
+    if: needs.pr-info.outputs.has-android-changes == 'true'
+    
+    strategy:
+      matrix:
+        variant: [freeDebug, proDebug]
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: Setup JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+    
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+    
+    - name: Cache Gradle Dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+          .gradle
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        restore-keys: |
+          ${{ runner.os }}-gradle-
+    
+    - name: Make Gradle Wrapper Executable
+      run: chmod +x ./gradlew
+    
+    - name: Build ${{ matrix.variant }}
+      run: ./gradlew assemble${{ matrix.variant }}
+    
+    - name: Upload APK
+      uses: actions/upload-artifact@v3
+      with:
+        name: pr-apk-${{ matrix.variant }}
+        path: app/build/outputs/apk/*/debug/*.apk
+        retention-days: 7
+
+  # ==============================================================================
+  # Native Code Validation
+  # ==============================================================================
+  native-validation:
+    name: Native Code Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: pr-info
+    if: needs.pr-info.outputs.has-native-changes == 'true'
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    
+    - name: Setup JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+    
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+    
+    - name: Cache Gradle Dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+          .gradle
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        restore-keys: |
+          ${{ runner.os }}-gradle-
+    
+    - name: Make Gradle Wrapper Executable
+      run: chmod +x ./gradlew
+    
+    - name: Build Native Libraries
+      run: ./gradlew externalNativeBuildDebug
+    
+    - name: Validate Native Libraries
+      run: |
+        # Check if native libraries were built
+        NATIVE_LIBS=$(find app/build -name "*.so" | wc -l)
+        if [ $NATIVE_LIBS -eq 0 ]; then
+          echo "❌ No native libraries found"
+          exit 1
+        else
+          echo "✅ Found $NATIVE_LIBS native libraries"
+          find app/build -name "*.so" -exec ls -la {} \;
+        fi
+
+  # ==============================================================================
+  # Documentation Validation
+  # ==============================================================================
+  docs-validation:
+    name: Documentation Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: pr-info
+    if: needs.pr-info.outputs.has-docs-changes == 'true'
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: Validate Markdown
+      uses: DavidAnson/markdownlint-cli2-action@v13
+      with:
+        globs: '**/*.md'
+        continue-on-error: true
+    
+    - name: Check Links
+      uses: gaurav-nelson/github-action-markdown-link-check@v1
+      with:
+        use-quiet-mode: 'yes'
+        use-verbose-mode: 'yes'
+        config-file: '.github/markdown-link-check-config.json'
+        continue-on-error: true
+
+  # ==============================================================================
+  # PR Summary
+  # ==============================================================================
+  pr-summary:
+    name: PR Summary
+    runs-on: ubuntu-latest
+    needs: [pr-info, quick-checks, focused-tests, build-validation, native-validation, docs-validation]
+    if: always() && github.event.pull_request.draft == false
+    
+    steps:
+    - name: Generate PR Summary
+      run: |
+        echo "# 📋 Pull Request Validation Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # Job status summary
+        echo "## 🔍 Validation Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        # Quick checks
+        if [ "${{ needs.quick-checks.result }}" = "success" ]; then
+          echo "✅ **Quick Quality Checks**: Passed" >> $GITHUB_STEP_SUMMARY
+        elif [ "${{ needs.quick-checks.result }}" = "failure" ]; then
+          echo "❌ **Quick Quality Checks**: Failed" >> $GITHUB_STEP_SUMMARY
+        elif [ "${{ needs.quick-checks.result }}" = "skipped" ]; then
+          echo "⏭️ **Quick Quality Checks**: Skipped (no Android changes)" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        # Unit tests
+        if [ "${{ needs.focused-tests.result }}" = "success" ]; then
+          echo "✅ **Unit Tests**: Passed" >> $GITHUB_STEP_SUMMARY
+        elif [ "${{ needs.focused-tests.result }}" = "failure" ]; then
+          echo "❌ **Unit Tests**: Failed" >> $GITHUB_STEP_SUMMARY
+        elif [ "${{ needs.focused-tests.result }}" = "skipped" ]; then
+          echo "⏭️ **Unit Tests**: Skipped" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        # Build validation
+        if [ "${{ needs.build-validation.result }}" = "success" ]; then
+          echo "✅ **Build Validation**: Passed" >> $GITHUB_STEP_SUMMARY
+        elif [ "${{ needs.build-validation.result }}" = "failure" ]; then
+          echo "❌ **Build Validation**: Failed" >> $GITHUB_STEP_SUMMARY
+        elif [ "${{ needs.build-validation.result }}" = "skipped" ]; then
+          echo "⏭️ **Build Validation**: Skipped" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        # Native validation
+        if [ "${{ needs.native-validation.result }}" = "success" ]; then
+          echo "✅ **Native Code Validation**: Passed" >> $GITHUB_STEP_SUMMARY
+        elif [ "${{ needs.native-validation.result }}" = "failure" ]; then
+          echo "❌ **Native Code Validation**: Failed" >> $GITHUB_STEP_SUMMARY
+        elif [ "${{ needs.native-validation.result }}" = "skipped" ]; then
+          echo "⏭️ **Native Code Validation**: Skipped (no native changes)" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        # Documentation validation
+        if [ "${{ needs.docs-validation.result }}" = "success" ]; then
+          echo "✅ **Documentation Validation**: Passed" >> $GITHUB_STEP_SUMMARY
+        elif [ "${{ needs.docs-validation.result }}" = "failure" ]; then
+          echo "❌ **Documentation Validation**: Failed" >> $GITHUB_STEP_SUMMARY
+        elif [ "${{ needs.docs-validation.result }}" = "skipped" ]; then
+          echo "⏭️ **Documentation Validation**: Skipped (no doc changes)" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## 📁 Changed Files" >> $GITHUB_STEP_SUMMARY
+        echo "- **Android Changes**: ${{ needs.pr-info.outputs.has-android-changes }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Native Changes**: ${{ needs.pr-info.outputs.has-native-changes }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Documentation Changes**: ${{ needs.pr-info.outputs.has-docs-changes }}" >> $GITHUB_STEP_SUMMARY

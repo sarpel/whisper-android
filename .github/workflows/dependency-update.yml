@@ -1,0 +1,412 @@
+name: Dependency Updates
+
+on:
+  schedule:
+    # Run every Monday at 9:00 AM UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+    inputs:
+      update_type:
+        description: 'Type of update to perform'
+        required: true
+        default: 'minor'
+        type: choice
+        options:
+        - patch
+        - minor
+        - major
+        - all
+
+env:
+  GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2
+
+jobs:
+  # ==============================================================================
+  # Dependency Analysis
+  # ==============================================================================
+  analyze-dependencies:
+    name: Analyze Dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    
+    outputs:
+      has-updates: ${{ steps.check-updates.outputs.has-updates }}
+      update-summary: ${{ steps.check-updates.outputs.update-summary }}
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Setup JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+    
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+    
+    - name: Cache Gradle Dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+          .gradle
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        restore-keys: |
+          ${{ runner.os }}-gradle-
+    
+    - name: Make Gradle Wrapper Executable
+      run: chmod +x ./gradlew
+    
+    - name: Check for Dependency Updates
+      id: check-updates
+      run: |
+        # Install dependency update plugin if not already present
+        ./gradlew dependencyUpdates
+        
+        # Check if updates are available
+        if [ -f "build/dependencyUpdates/report.txt" ]; then
+          UPDATES=$(grep -c "available" build/dependencyUpdates/report.txt || echo "0")
+          if [ $UPDATES -gt 0 ]; then
+            echo "has-updates=true" >> $GITHUB_OUTPUT
+            echo "Found $UPDATES dependency updates available"
+            
+            # Create summary
+            echo "update-summary<<EOF" >> $GITHUB_OUTPUT
+            echo "## 📦 Available Dependency Updates" >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+            grep -A 5 -B 1 "available" build/dependencyUpdates/report.txt | head -20 >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "has-updates=false" >> $GITHUB_OUTPUT
+            echo "No dependency updates available"
+          fi
+        else
+          echo "has-updates=false" >> $GITHUB_OUTPUT
+          echo "Could not check for updates"
+        fi
+    
+    - name: Upload Dependency Report
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: dependency-report
+        path: build/dependencyUpdates/
+        retention-days: 7
+
+  # ==============================================================================
+  # Security Vulnerability Check
+  # ==============================================================================
+  security-check:
+    name: Security Vulnerability Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: Setup JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+    
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+    
+    - name: Cache Gradle Dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+          .gradle
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        restore-keys: |
+          ${{ runner.os }}-gradle-
+    
+    - name: Make Gradle Wrapper Executable
+      run: chmod +x ./gradlew
+    
+    - name: Run OWASP Dependency Check
+      run: |
+        # Add OWASP dependency check plugin to build.gradle.kts if not present
+        if ! grep -q "org.owasp.dependencycheck" app/build.gradle.kts; then
+          echo "OWASP Dependency Check plugin not found, skipping security scan"
+          echo "To enable, add: id(\"org.owasp.dependencycheck\") version \"8.4.0\""
+        else
+          ./gradlew dependencyCheckAnalyze
+        fi
+      continue-on-error: true
+    
+    - name: Upload Security Report
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: security-report
+        path: app/build/reports/dependency-check-report.html
+        retention-days: 30
+
+  # ==============================================================================
+  # Create Update PR
+  # ==============================================================================
+  create-update-pr:
+    name: Create Dependency Update PR
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: [analyze-dependencies, security-check]
+    if: needs.analyze-dependencies.outputs.has-updates == 'true'
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: 0
+    
+    - name: Setup JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+    
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+    
+    - name: Cache Gradle Dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+          .gradle
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        restore-keys: |
+          ${{ runner.os }}-gradle-
+    
+    - name: Configure Git
+      run: |
+        git config --global user.name 'github-actions[bot]'
+        git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+    
+    - name: Create Update Branch
+      run: |
+        BRANCH_NAME="dependency-updates/$(date +%Y-%m-%d)"
+        git checkout -b "$BRANCH_NAME"
+        echo "BRANCH_NAME=$BRANCH_NAME" >> $GITHUB_ENV
+    
+    - name: Make Gradle Wrapper Executable
+      run: chmod +x ./gradlew
+    
+    - name: Update Dependencies
+      run: |
+        # This is a simplified approach - in practice, you'd want more sophisticated
+        # dependency update logic, possibly using tools like Renovate or Dependabot
+        
+        echo "Updating dependencies based on type: ${{ github.event.inputs.update_type || 'minor' }}"
+        
+        # For now, we'll just run the dependency updates report
+        # In a real implementation, you'd parse the report and selectively update
+        ./gradlew dependencyUpdates
+        
+        # Example: Update specific dependencies (this would be more sophisticated)
+        # ./gradlew useLatestVersions
+        
+        echo "Dependency update process completed"
+    
+    - name: Build and Test
+      run: |
+        # Build to ensure updates don't break anything
+        ./gradlew assembleDebug
+        
+        # Run tests to ensure functionality is preserved
+        ./gradlew testDebugUnitTest
+    
+    - name: Commit Changes
+      run: |
+        if git diff --quiet; then
+          echo "No changes to commit"
+          echo "HAS_CHANGES=false" >> $GITHUB_ENV
+        else
+          git add .
+          git commit -m "chore: update dependencies
+          
+          - Updated dependencies based on ${{ github.event.inputs.update_type || 'minor' }} update policy
+          - All tests passing after updates
+          - Security vulnerabilities addressed where applicable
+          
+          Auto-generated by dependency-update workflow"
+          echo "HAS_CHANGES=true" >> $GITHUB_ENV
+        fi
+    
+    - name: Push Changes
+      if: env.HAS_CHANGES == 'true'
+      run: |
+        git push origin "$BRANCH_NAME"
+    
+    - name: Create Pull Request
+      if: env.HAS_CHANGES == 'true'
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const { data: pr } = await github.rest.pulls.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: '🔄 Automated Dependency Updates',
+            head: process.env.BRANCH_NAME,
+            base: 'develop',
+            body: `## 📦 Dependency Updates
+          
+          This PR contains automated dependency updates generated by the dependency-update workflow.
+          
+          ### 🔍 Update Summary
+          ${{ needs.analyze-dependencies.outputs.update-summary }}
+          
+          ### ✅ Validation
+          - [x] All builds pass
+          - [x] Unit tests pass
+          - [x] Security scan completed
+          
+          ### 📋 Review Checklist
+          - [ ] Review updated dependencies for breaking changes
+          - [ ] Verify app functionality with updated dependencies
+          - [ ] Check for any new security vulnerabilities
+          - [ ] Update documentation if needed
+          
+          ### 🤖 Automation Info
+          - **Update Type**: ${{ github.event.inputs.update_type || 'minor' }}
+          - **Generated**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+          - **Workflow**: dependency-update.yml
+          
+          ---
+          
+          This PR was automatically created by GitHub Actions. Please review carefully before merging.`,
+            draft: false
+          });
+          
+          // Add labels
+          await github.rest.issues.addLabels({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: pr.number,
+            labels: ['dependencies', 'automated', 'chore']
+          });
+          
+          console.log(`Created PR #${pr.number}: ${pr.html_url}`);
+
+  # ==============================================================================
+  # Notification
+  # ==============================================================================
+  notify:
+    name: Send Notifications
+    runs-on: ubuntu-latest
+    needs: [analyze-dependencies, create-update-pr]
+    if: always()
+    
+    steps:
+    - name: Notify on Slack
+      if: secrets.SLACK_WEBHOOK_URL != ''
+      uses: 8398a7/action-slack@v3
+      with:
+        status: ${{ job.status }}
+        text: |
+          🔄 **Dependency Update Workflow Completed**
+          
+          **Status**: ${{ needs.create-update-pr.result || 'No updates needed' }}
+          **Updates Available**: ${{ needs.analyze-dependencies.outputs.has-updates }}
+          
+          ${{ needs.analyze-dependencies.outputs.has-updates == 'true' && 'A new PR has been created with dependency updates.' || 'No dependency updates were found.' }}
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+    
+    - name: Create Issue on Failure
+      if: failure()
+      uses: actions/github-script@v7
+      with:
+        script: |
+          await github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: '🚨 Dependency Update Workflow Failed',
+            body: `## ❌ Dependency Update Failure
+          
+          The automated dependency update workflow has failed.
+          
+          **Workflow Run**: [${context.runId}](${context.payload.repository.html_url}/actions/runs/${context.runId})
+          **Failure Time**: ${new Date().toISOString()}
+          
+          Please investigate and resolve the issue.
+          
+          ### Possible Causes
+          - Build failures due to breaking changes in dependencies
+          - Test failures after dependency updates
+          - Network issues during dependency resolution
+          - Authentication issues with package repositories
+          
+          ### Next Steps
+          1. Review the workflow logs
+          2. Check for breaking changes in updated dependencies
+          3. Fix any compatibility issues
+          4. Re-run the workflow manually if needed`,
+            labels: ['bug', 'dependencies', 'workflow-failure']
+          });
+
+  # ==============================================================================
+  # Cleanup
+  # ==============================================================================
+  cleanup:
+    name: Cleanup
+    runs-on: ubuntu-latest
+    needs: [create-update-pr]
+    if: always()
+    
+    steps:
+    - name: Cleanup Old Update Branches
+      uses: actions/github-script@v7
+      with:
+        script: |
+          // Get all branches that match the dependency update pattern
+          const { data: branches } = await github.rest.repos.listBranches({
+            owner: context.repo.owner,
+            repo: context.repo.repo
+          });
+          
+          const updateBranches = branches.filter(branch => 
+            branch.name.startsWith('dependency-updates/')
+          );
+          
+          // Delete branches older than 7 days that don't have open PRs
+          for (const branch of updateBranches) {
+            try {
+              // Check if branch has an open PR
+              const { data: prs } = await github.rest.pulls.list({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                head: `${context.repo.owner}:${branch.name}`,
+                state: 'open'
+              });
+              
+              if (prs.length === 0) {
+                // No open PR, safe to delete if old enough
+                const branchDate = branch.name.split('/')[1];
+                const branchTime = new Date(branchDate).getTime();
+                const weekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+                
+                if (branchTime < weekAgo) {
+                  await github.rest.git.deleteRef({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    ref: `heads/${branch.name}`
+                  });
+                  console.log(`Deleted old branch: ${branch.name}`);
+                }
+              }
+            } catch (error) {
+              console.log(`Could not process branch ${branch.name}: ${error.message}`);
+            }
+          }

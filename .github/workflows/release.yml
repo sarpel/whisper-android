@@ -1,0 +1,317 @@
+name: Release Pipeline
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.0)'
+        required: true
+        type: string
+      flavor:
+        description: 'Product flavor'
+        required: true
+        default: 'pro'
+        type: choice
+        options:
+        - free
+        - pro
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  GRADLE_OPTS: -Dorg.gradle.daemon=false -Dorg.gradle.workers.max=2
+  GRADLE_USER_HOME: ${{ github.workspace }}/.gradle
+
+jobs:
+  # ==============================================================================
+  # Pre-Release Validation
+  # ==============================================================================
+  pre-release-validation:
+    name: Pre-Release Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      flavor: ${{ steps.flavor.outputs.flavor }}
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Determine Version
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+        else
+          echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Determine Flavor
+      id: flavor
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "flavor=${{ github.event.inputs.flavor }}" >> $GITHUB_OUTPUT
+        else
+          echo "flavor=pro" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Validate Version Format
+      run: |
+        if [[ ! "${{ steps.version.outputs.version }}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$ ]]; then
+          echo "Invalid version format: ${{ steps.version.outputs.version }}"
+          echo "Expected format: v1.0.0 or v1.0.0-beta"
+          exit 1
+        fi
+    
+    - name: Check for Existing Release
+      run: |
+        if gh release view "${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+          echo "Release ${{ steps.version.outputs.version }} already exists"
+          exit 1
+        fi
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ==============================================================================
+  # Build Release Artifacts
+  # ==============================================================================
+  build-release:
+    name: Build Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: pre-release-validation
+    
+    strategy:
+      matrix:
+        output-type: [apk, aab]
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: Setup JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+    
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v3
+    
+    - name: Cache Gradle Dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.gradle/caches
+          ~/.gradle/wrapper
+          .gradle
+        key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+        restore-keys: |
+          ${{ runner.os }}-gradle-
+    
+    - name: Decode Keystore
+      run: |
+        echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > release.keystore
+    
+    - name: Make Gradle Wrapper Executable
+      run: chmod +x ./gradlew
+    
+    - name: Build APK
+      if: matrix.output-type == 'apk'
+      run: ./gradlew assemble${{ needs.pre-release-validation.outputs.flavor }}Release
+      env:
+        KEYSTORE_FILE: ${{ github.workspace }}/release.keystore
+        KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+    
+    - name: Build AAB
+      if: matrix.output-type == 'aab'
+      run: ./gradlew bundle${{ needs.pre-release-validation.outputs.flavor }}Release
+      env:
+        KEYSTORE_FILE: ${{ github.workspace }}/release.keystore
+        KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+        KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+    
+    - name: Sign APK
+      if: matrix.output-type == 'apk'
+      run: |
+        APK_PATH=$(find app/build/outputs/apk/${{ needs.pre-release-validation.outputs.flavor }}/release -name "*.apk" | head -1)
+        $ANDROID_HOME/build-tools/34.0.0/apksigner sign \
+          --ks release.keystore \
+          --ks-pass pass:${{ secrets.KEYSTORE_PASSWORD }} \
+          --ks-key-alias ${{ secrets.KEY_ALIAS }} \
+          --key-pass pass:${{ secrets.KEY_PASSWORD }} \
+          --out app-${{ needs.pre-release-validation.outputs.flavor }}-release-signed.apk \
+          "$APK_PATH"
+    
+    - name: Verify APK Signature
+      if: matrix.output-type == 'apk'
+      run: |
+        $ANDROID_HOME/build-tools/34.0.0/apksigner verify app-${{ needs.pre-release-validation.outputs.flavor }}-release-signed.apk
+    
+    - name: Generate Release Notes
+      run: |
+        echo "# Release Notes for ${{ needs.pre-release-validation.outputs.version }}" > release-notes.md
+        echo "" >> release-notes.md
+        echo "## What's New" >> release-notes.md
+        echo "" >> release-notes.md
+        
+        # Get commits since last tag
+        LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+        if [ -n "$LAST_TAG" ]; then
+          echo "### Changes since $LAST_TAG:" >> release-notes.md
+          git log --pretty=format:"- %s" $LAST_TAG..HEAD >> release-notes.md
+        else
+          echo "### Initial Release" >> release-notes.md
+          echo "- First release of Whisper Android" >> release-notes.md
+        fi
+        
+        echo "" >> release-notes.md
+        echo "## Build Information" >> release-notes.md
+        echo "- **Version**: ${{ needs.pre-release-validation.outputs.version }}" >> release-notes.md
+        echo "- **Flavor**: ${{ needs.pre-release-validation.outputs.flavor }}" >> release-notes.md
+        echo "- **Build Date**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> release-notes.md
+        echo "- **Commit**: ${{ github.sha }}" >> release-notes.md
+    
+    - name: Upload Release Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: release-${{ matrix.output-type }}-${{ needs.pre-release-validation.outputs.flavor }}
+        path: |
+          app-${{ needs.pre-release-validation.outputs.flavor }}-release-signed.apk
+          app/build/outputs/bundle/${{ needs.pre-release-validation.outputs.flavor }}/release/*.aab
+          release-notes.md
+        retention-days: 30
+
+  # ==============================================================================
+  # Security and Quality Checks
+  # ==============================================================================
+  security-validation:
+    name: Security Validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: build-release
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: Download Release Artifacts
+      uses: actions/download-artifact@v3
+      with:
+        name: release-apk-${{ needs.pre-release-validation.outputs.flavor }}
+    
+    - name: Scan APK for Vulnerabilities
+      run: |
+        # Install MobSF or similar security scanning tool
+        echo "Security scanning would be implemented here"
+        echo "Tools: MobSF, QARK, or commercial solutions"
+    
+    - name: Validate APK Structure
+      run: |
+        if [ -f "app-${{ needs.pre-release-validation.outputs.flavor }}-release-signed.apk" ]; then
+          # Use aapt to validate APK structure
+          $ANDROID_HOME/build-tools/34.0.0/aapt dump badging app-${{ needs.pre-release-validation.outputs.flavor }}-release-signed.apk
+          echo "APK structure validation completed"
+        fi
+
+  # ==============================================================================
+  # Create GitHub Release
+  # ==============================================================================
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: [pre-release-validation, build-release, security-validation]
+    
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+    
+    - name: Download All Artifacts
+      uses: actions/download-artifact@v3
+    
+    - name: Prepare Release Assets
+      run: |
+        mkdir -p release-assets
+        
+        # Copy APK
+        if [ -f "release-apk-${{ needs.pre-release-validation.outputs.flavor }}/app-${{ needs.pre-release-validation.outputs.flavor }}-release-signed.apk" ]; then
+          cp "release-apk-${{ needs.pre-release-validation.outputs.flavor }}/app-${{ needs.pre-release-validation.outputs.flavor }}-release-signed.apk" \
+             "release-assets/whisper-android-${{ needs.pre-release-validation.outputs.version }}-${{ needs.pre-release-validation.outputs.flavor }}.apk"
+        fi
+        
+        # Copy AAB
+        AAB_FILE=$(find release-aab-${{ needs.pre-release-validation.outputs.flavor }} -name "*.aab" | head -1)
+        if [ -n "$AAB_FILE" ]; then
+          cp "$AAB_FILE" "release-assets/whisper-android-${{ needs.pre-release-validation.outputs.version }}-${{ needs.pre-release-validation.outputs.flavor }}.aab"
+        fi
+        
+        # Copy release notes
+        if [ -f "release-apk-${{ needs.pre-release-validation.outputs.flavor }}/release-notes.md" ]; then
+          cp "release-apk-${{ needs.pre-release-validation.outputs.flavor }}/release-notes.md" release-assets/
+        fi
+        
+        ls -la release-assets/
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ needs.pre-release-validation.outputs.version }}
+        name: Whisper Android ${{ needs.pre-release-validation.outputs.version }}
+        body_path: release-assets/release-notes.md
+        files: |
+          release-assets/*.apk
+          release-assets/*.aab
+        prerelease: ${{ github.event.inputs.prerelease == 'true' }}
+        generate_release_notes: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ==============================================================================
+  # Post-Release Actions
+  # ==============================================================================
+  post-release:
+    name: Post-Release Actions
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [pre-release-validation, create-release]
+    if: always() && needs.create-release.result == 'success'
+    
+    steps:
+    - name: Notify Slack
+      if: secrets.SLACK_WEBHOOK_URL != ''
+      uses: 8398a7/action-slack@v3
+      with:
+        status: success
+        text: |
+          🎉 New release published!
+          
+          **Version**: ${{ needs.pre-release-validation.outputs.version }}
+          **Flavor**: ${{ needs.pre-release-validation.outputs.flavor }}
+          **Download**: https://github.com/${{ github.repository }}/releases/tag/${{ needs.pre-release-validation.outputs.version }}
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+    
+    - name: Update Documentation
+      run: |
+        echo "Documentation update would be triggered here"
+        echo "This could update version numbers in README, docs, etc."
+    
+    - name: Trigger Deployment
+      if: needs.pre-release-validation.outputs.flavor == 'pro' && !contains(needs.pre-release-validation.outputs.version, 'beta')
+      run: |
+        echo "Production deployment would be triggered here"
+        echo "This could deploy to Google Play Store, internal distribution, etc."
