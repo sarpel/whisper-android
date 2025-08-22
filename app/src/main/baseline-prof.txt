@@ -1,0 +1,69 @@
+# Baseline Profile for Whisper Android
+# This file contains the most critical code paths that should be pre-compiled
+# for optimal app startup and runtime performance.
+
+# Application startup
+Lcom/app/whisper/WhisperApplication;-><init>()V
+Lcom/app/whisper/WhisperApplication;->onCreate()V
+Lcom/app/whisper/WhisperApplication;->initializeLogging()V
+
+# MainActivity and UI initialization
+Lcom/app/whisper/presentation/ui/MainActivity;-><init>()V
+Lcom/app/whisper/presentation/ui/MainActivity;->onCreate(Landroid/os/Bundle;)V
+
+# Hilt dependency injection - critical startup paths
+Lcom/app/whisper/di/NetworkModule;->provideOkHttpClient(Landroid/content/Context;Lokhttp3/Cache;Lokhttp3/logging/HttpLoggingInterceptor;)Lokhttp3/OkHttpClient;
+Lcom/app/whisper/di/DatabaseModule;->provideSharedPreferences(Landroid/content/Context;)Landroid/content/SharedPreferences;
+Lcom/app/whisper/di/AudioModule;->provideAudioConfig()Lcom/app/whisper/di/AudioConfig;
+
+# ViewModel initialization - critical for UI responsiveness
+Lcom/app/whisper/presentation/viewmodel/TranscriptionViewModel;-><init>(Lcom/app/whisper/data/audio/AudioRecorder;Lcom/app/whisper/domain/usecase/TranscribeAudioUseCase;Lcom/app/whisper/domain/usecase/DownloadModelUseCase;)V
+Lcom/app/whisper/presentation/viewmodel/TranscriptionViewModel;->startRecording()V
+Lcom/app/whisper/presentation/viewmodel/TranscriptionViewModel;->stopRecording()V
+
+# Audio recording - performance critical
+Lcom/app/whisper/data/audio/AudioRecorderImpl;->startRecording()Lkotlinx/coroutines/flow/Flow;
+Lcom/app/whisper/data/audio/AudioRecorderImpl;->stopRecording()Lkotlinx/coroutines/flow/Flow;
+Lcom/app/whisper/data/audio/AudioRecorderImpl;->processAudioData([B)V
+
+# Model management - frequently accessed
+Lcom/app/whisper/data/manager/ModelManager;->getAllModels()Ljava/util/List;
+Lcom/app/whisper/data/manager/ModelManager;->getCurrentModel()Lkotlinx/coroutines/flow/StateFlow;
+Lcom/app/whisper/data/manager/ModelManager;->setCurrentModel(Lcom/app/whisper/domain/entity/WhisperModel;)Lkotlin/Result;
+
+# WhisperModel enum - frequently accessed
+Lcom/app/whisper/domain/entity/WhisperModel;->values()[Lcom/app/whisper/domain/entity/WhisperModel;
+Lcom/app/whisper/domain/entity/WhisperModel;->getFileSizeFormatted()Ljava/lang/String;
+Lcom/app/whisper/domain/entity/WhisperModel;->isAvailable()Z
+
+# Use cases - business logic hot paths
+Lcom/app/whisper/domain/usecase/TranscribeAudioUseCase;->execute(Lcom/app/whisper/data/model/AudioData;Lcom/app/whisper/domain/entity/ProcessingParameters;)Lkotlinx/coroutines/flow/Flow;
+Lcom/app/whisper/domain/usecase/DownloadModelUseCase;->execute(Lcom/app/whisper/domain/entity/WhisperModel;)Lkotlinx/coroutines/flow/Flow;
+
+# UI State management - critical for smooth UI
+Lcom/app/whisper/presentation/state/TranscriptionUiState$Ready;-><init>(Lcom/app/whisper/domain/entity/WhisperModel;Lcom/app/whisper/data/model/RecordingState;Z)V
+Lcom/app/whisper/presentation/state/TranscriptionUiState$Recording;-><init>(Lcom/app/whisper/data/model/RecordingState;JFLcom/app/whisper/data/model/WaveformData;ZZ)V
+Lcom/app/whisper/presentation/state/TranscriptionUiState$Processing;-><init>(Lcom/app/whisper/domain/usecase/TranscriptionProgress;Lcom/app/whisper/data/model/AudioData;)V
+
+# Compose UI - critical rendering paths
+Lcom/app/whisper/presentation/ui/screen/RecordingScreenKt;->RecordingScreen(Lcom/app/whisper/presentation/state/TranscriptionUiState;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Lkotlin/jvm/functions/Function0;Landroidx/compose/ui/Modifier;Lcom/app/whisper/presentation/permission/PermissionState;Lkotlin/jvm/functions/Function0;Landroidx/compose/runtime/Composer;II)V
+
+# Waveform visualization - performance critical for real-time display
+Lcom/app/whisper/presentation/ui/component/WaveformVisualizerKt;->WaveformVisualizer(Lcom/app/whisper/data/model/WaveformData;ZLandroidx/compose/ui/Modifier;Landroidx/compose/ui/graphics/Color;Landroidx/compose/ui/graphics/Color;FFILandroidx/compose/runtime/Composer;II)V
+
+# Permission handling - user interaction critical
+Lcom/app/whisper/presentation/permission/PermissionHandler;->requestMicrophonePermission()V
+Lcom/app/whisper/presentation/permission/PermissionHandler;->hasPermission()Z
+
+# Data models - frequently created/accessed
+Lcom/app/whisper/data/model/AudioData;->fromByteArray([B)Lcom/app/whisper/data/model/AudioData;
+Lcom/app/whisper/data/model/WaveformData;->fromAudioData(Lcom/app/whisper/data/model/AudioData;)Lcom/app/whisper/data/model/WaveformData;
+
+# Coroutines and Flow - async operation hot paths
+Lkotlinx/coroutines/flow/StateFlowKt;->MutableStateFlow(Ljava/lang/Object;)Lkotlinx/coroutines/flow/MutableStateFlow;
+Lkotlinx/coroutines/flow/FlowKt;->flowOf(Ljava/lang/Object;)Lkotlinx/coroutines/flow/Flow;
+
+# Kotlin standard library - frequently used
+Lkotlin/Result$Companion;->success(Ljava/lang/Object;)Lkotlin/Result;
+Lkotlin/Result$Companion;->failure(Ljava/lang/Throwable;)Lkotlin/Result;
+Lkotlin/collections/CollectionsKt;->listOf([Ljava/lang/Object;)Ljava/util/List;

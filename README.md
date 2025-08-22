@@ -1,6 +1,12 @@
-# Whisper Android
+# Whisper Android 🎙️
 
-A native Android application for on-device speech-to-text transcription using whisper.cpp, optimized for ARM v8 processors.
+[![Android](https://img.shields.io/badge/Platform-Android-green.svg)](https://android.com)
+[![Kotlin](https://img.shields.io/badge/Language-Kotlin-blue.svg)](https://kotlinlang.org)
+[![Jetpack Compose](https://img.shields.io/badge/UI-Jetpack%20Compose-orange.svg)](https://developer.android.com/jetpack/compose)
+[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![API](https://img.shields.io/badge/API-24%2B-brightgreen.svg)](https://android-arsenal.com/api?level=24)
+
+A privacy-focused, offline speech-to-text Android application powered by OpenAI's Whisper model. All processing happens locally on your device - no internet connection required after initial setup.
 
 ## 🎯 Features
 

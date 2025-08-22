@@ -2,8 +2,12 @@ package com.app.whisper
 
 import android.app.Application
 import android.util.Log
+import androidx.tracing.trace
+import com.app.whisper.BuildConfig
+import com.app.whisper.performance.PerformanceManager
 import dagger.hilt.android.HiltAndroidApp
 import timber.log.Timber
+import javax.inject.Inject
 
 /**
  * Main application class for Whisper Android.
@@ -17,22 +21,42 @@ import timber.log.Timber
 @HiltAndroidApp
 class WhisperApplication : Application() {
 
+    @Inject
+    lateinit var performanceManager: PerformanceManager
+
     override fun onCreate() {
         super.onCreate()
 
-        // Initialize logging
-        initializeLogging()
+        trace("WhisperApplication.onCreate") {
+            // Initialize logging
+            initializeLogging()
 
-        // Log application startup
-        Timber.i("WhisperApplication started")
+            // Log application startup
+            Timber.i("WhisperApplication started")
 
-        // Initialize crash reporting (if needed)
-        initializeCrashReporting()
+            // Initialize performance monitoring
+            initializePerformanceMonitoring()
 
-        // Set up global exception handler
-        setupGlobalExceptionHandler()
+            // Initialize crash reporting (if needed)
+            initializeCrashReporting()
 
-        Timber.d("Application initialization completed")
+            // Set up global exception handler
+            setupGlobalExceptionHandler()
+
+            Timber.d("Application initialization completed")
+        }
+    }
+
+    /**
+     * Initialize performance monitoring.
+     */
+    private fun initializePerformanceMonitoring() {
+        try {
+            // Log initial performance metrics
+            performanceManager.logPerformanceMetrics()
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to initialize performance monitoring")
+        }
     }
 
     /**

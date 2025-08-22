@@ -88,3 +88,74 @@
 # Keep data classes
 -keep class com.app.whisper.data.model.** { *; }
 -keep class com.app.whisper.domain.model.** { *; }
+
+# ================================
+# Performance Optimization Rules
+# ================================
+
+# Keep performance monitoring classes
+-keep class com.app.whisper.performance.** { *; }
+
+# Keep baseline profile classes
+-keep class androidx.profileinstaller.** { *; }
+
+# ================================
+# Security and Encryption Rules
+# ================================
+
+# Keep encrypted preferences classes
+-keep class androidx.security.crypto.** { *; }
+-keep class com.google.crypto.tink.** { *; }
+
+# ================================
+# Networking Rules
+# ================================
+
+# Keep OkHttp classes
+-keep class okhttp3.** { *; }
+-keep interface okhttp3.** { *; }
+-dontwarn okhttp3.**
+-dontwarn okio.**
+
+# Keep HTTP logging interceptor
+-keep class okhttp3.logging.HttpLoggingInterceptor { *; }
+
+# ================================
+# Logging Rules
+# ================================
+
+# Keep Timber logging
+-keep class timber.log.** { *; }
+-keep class timber.log.Timber$Tree { *; }
+
+# Remove debug logging in release builds
+-assumenosideeffects class timber.log.Timber {
+    public static *** d(...);
+    public static *** v(...);
+}
+
+# ================================
+# Audio Processing Rules
+# ================================
+
+# Keep audio processing classes
+-keep class com.app.whisper.data.audio.** { *; }
+-keep class android.media.AudioRecord { *; }
+-keep class android.media.AudioFormat { *; }
+
+# ================================
+# Optimization Settings
+# ================================
+
+# Enable aggressive optimization
+-optimizations !code/simplification/arithmetic,!code/simplification/cast,!field/*,!class/merging/*
+-optimizationpasses 5
+-allowaccessmodification
+
+# Keep line numbers for crash reports
+-keepattributes SourceFile,LineNumberTable
+-renamesourcefileattribute SourceFile
+
+# Remove unused code warnings
+-dontwarn javax.annotation.**
+-dontwarn org.jetbrains.annotations.**
